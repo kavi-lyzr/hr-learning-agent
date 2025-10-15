@@ -1,54 +1,34 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 
-export interface IUser {
-  lyzrUserId: string;
+export interface IUser extends Document {
+  lyzrId: string; // From Lyzr OAuth
   email: string;
-  displayName: string;
-  lyzrApiKey: string;
-  tools?: {
-    version: string;
-    toolIds: string[];
-  };
-  sourcingAgent: {
-    agentId: string;
-    version: string;
-  };
-  matchingAgent: {
-    agentId: string;
-    version: string;
-  };
+  name?: string;
+  avatarUrl?: string;
+  lyzrApiKey: string; // Encrypted
+  credits: number;
+  lastAccessedOrganization?: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
   schemaVersion: number;
 }
 
-export interface IUserDocument extends IUser, Document {
-  _id: Types.ObjectId;
-}
+const UserSchema = new Schema<IUser>({
+  lyzrId: { type: String, required: true, unique: true },
+  email: { type: String, required: true, index: true },
+  name: { type: String },
+  avatarUrl: { type: String },
+  lyzrApiKey: { type: String, required: true }, // Stored encrypted
+  credits: { type: Number, default: 0 },
+  lastAccessedOrganization: { type: Schema.Types.ObjectId, ref: 'Organization' },
+  schemaVersion: { type: Number, default: 1 },
+}, {
+  timestamps: true,
+});
 
-const UserSchema: Schema<IUserDocument> = new Schema<IUserDocument>(
-  {
-    lyzrUserId: { type: String, required: true, unique: true, index: true },
-    email: { type: String, required: true, unique: true },
-    displayName: { type: String, required: true },
-    lyzrApiKey: { type: String, required: true },
-    tools: {
-      version: { type: String },
-      toolIds: { type: [String], default: [] },
-    },
-    sourcingAgent: {
-      agentId: { type: String, required: true },
-      version: { type: String, required: true },
-    },
-    matchingAgent: {
-      agentId: { type: String, required: true },
-      version: { type: String, required: true },
-    },
-    schemaVersion: { type: Number, default: 1 },
-  },
-  { timestamps: true }
-);
-
+// Clear cache to use latest schema
 if (mongoose.models.User) {
   delete mongoose.models.User;
 }
 
-export default mongoose.model<IUserDocument>('User', UserSchema);
+export default mongoose.model<IUser>('User', UserSchema);
