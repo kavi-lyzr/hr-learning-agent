@@ -98,42 +98,14 @@ export default function EmployeeLessonViewPage() {
 
   if (isLoading) {
     return (
-      <SidebarProvider>
-        <div className="flex h-screen">
-          <AppSidebar />
-          <div className="flex-1 flex">
-            <div className="flex-1 flex flex-col">
-              <SiteHeader />
-              <main className="flex-1 overflow-y-auto p-8">
-                <Skeleton className="h-12 w-96 mb-4" />
-                <Skeleton className="h-[600px] w-full" />
-              </main>
-            </div>
-            <div className="w-96 border-l hidden xl:block">
-              <Skeleton className="h-full" />
-            </div>
-          </div>
-        </div>
-      </SidebarProvider>
+      <main className="flex-1 overflow-y-auto p-8">
+        <Skeleton className="h-12 w-96 mb-4" />
+        <Skeleton className="h-[600px] w-full" />
+      </main>
     );
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen">
-        <AppSidebar />
-        <div className="flex-1 flex">
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col min-w-0">
-            <SiteHeader
-              organization={organization || undefined}
-              breadcrumbs={[
-                { label: organization?.name || 'Courses', href: `/employee/dashboard?org=${orgId}` },
-                { label: course.title, href: `/employee/courses/${courseId}?org=${orgId}` },
-                { label: module.title },
-                { label: lesson.title }
-              ]}
-            />
             <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20">
               <div className="max-w-5xl mx-auto space-y-6">
                 {/* Lesson Header */}
@@ -241,14 +213,6 @@ export default function EmployeeLessonViewPage() {
                 </Card>
               </div>
             </main>
-          </div>
-
-          {/* AI Tutor Panel */}
-          <div className="w-96 hidden xl:block">
-            <AiTutorPanel />
-          </div>
-        </div>
-      </div>
-    </SidebarProvider>
+          
   );
 }

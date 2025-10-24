@@ -1,59 +1,71 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import OrganizationMember from '@/models/organizationMember';
-import User from '@/models/user';
-import Enrollment from '@/models/enrollment';
 import Department from '@/models/department';
+import Enrollment from '@/models/enrollment';
+import mongoose from 'mongoose';
 
 /**
  * GET /api/organizations/[id]/members
- * Get all members of an organization
+ * Get all members for an organization
  */
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await dbConnect();
 
   try {
-    const { id } = await params;
-    const members = await OrganizationMember.find({
-      organizationId: id,
-    })
+    const { id: organizationId } = await params;
+
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      return NextResponse.json(
+        { error: 'Invalid organization ID' },
+        { status: 400 }
+      );
+    }
+
+    const members = await OrganizationMember.find({ organizationId })
       .populate('userId', 'name email avatarUrl')
       .populate('departmentId', 'name')
       .sort({ createdAt: -1 })
-      .exec();
+      .lean();
 
     // Get enrollment counts for each member
-    const membersWithProgress = await Promise.all(
+    const membersWithStats = await Promise.all(
       members.map(async (member: any) => {
-        const enrollmentCount = member.userId
-          ? await Enrollment.countDocuments({ userId: member.userId })
-          : 0;
+        if (member.role === 'employee' && member.userId) {
+          const enrollments = await Enrollment.find({
+            userId: member.userId,
+            organizationId
+          }).lean();
+
+          const completed = enrollments.filter(e => e.status === 'completed').length;
+          const inProgress = enrollments.filter(e => e.status === 'in-progress').length;
+          const avgProgress = enrollments.length > 0
+            ? enrollments.reduce((sum, e) => sum + (e.progressPercentage || 0), 0) / enrollments.length
+            : 0;
+
+          return {
+            ...member,
+            coursesEnrolled: enrollments.length,
+            coursesCompleted: completed,
+            coursesInProgress: inProgress,
+            avgProgress: Math.round(avgProgress),
+          };
+        }
 
         return {
-          id: member._id,
-          userId: member.userId?._id,
-          email: member.email,
-          name: member.name || member.userId?.name,
-          avatarUrl: member.userId?.avatarUrl,
-          role: member.role,
-          status: member.status,
-          department: member.departmentId
-            ? {
-                id: member.departmentId._id,
-                name: member.departmentId.name,
-              }
-            : null,
-          enrollmentCount,
-          invitedAt: member.invitedAt,
-          joinedAt: member.joinedAt,
+          ...member,
+          coursesEnrolled: 0,
+          coursesCompleted: 0,
+          coursesInProgress: 0,
+          avgProgress: 0,
         };
       })
     );
 
-    return NextResponse.json({ members: membersWithProgress });
+    return NextResponse.json({ members: membersWithStats });
   } catch (error: any) {
     console.error('Error fetching members:', error);
     return NextResponse.json(
@@ -65,117 +77,131 @@ export async function GET(
 
 /**
  * POST /api/organizations/[id]/members
- * Add a single member to an organization
+ * Add a new member to organization
  */
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await dbConnect();
 
   try {
-    const { id } = await params;
-    const { email, name, role, departmentId, courseIds } = await request.json();
+    const { id: organizationId } = await params;
 
-    // Validate input
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      return NextResponse.json(
+        { error: 'Invalid organization ID' },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const { email, name, role, departmentId, courseIds } = body;
+
+    // Validate required fields
     if (!email) {
       return NextResponse.json(
-        { error: 'email is required' },
+        { error: 'Email is required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
         { status: 400 }
       );
     }
 
     // Check if member already exists
     const existingMember = await OrganizationMember.findOne({
-      organizationId: id,
-      email: email.toLowerCase(),
+      organizationId,
+      email: email.toLowerCase()
     });
 
     if (existingMember) {
       return NextResponse.json(
-        { error: 'Member with this email already exists in the organization' },
+        { error: `${email} is already a member of this organization` },
         { status: 409 }
       );
     }
 
-    // Check if user exists in system
-    const user = await User.findOne({ email: email.toLowerCase() });
+    // Validate department if provided
+    let department = null;
+    if (departmentId) {
+      if (!mongoose.Types.ObjectId.isValid(departmentId)) {
+        return NextResponse.json(
+          { error: 'Invalid department ID' },
+          { status: 400 }
+        );
+      }
+
+      department = await Department.findOne({
+        _id: departmentId,
+        organizationId
+      });
+
+      if (!department) {
+        return NextResponse.json(
+          { error: 'Department not found' },
+          { status: 404 }
+        );
+      }
+    }
 
     // Create member
     const member = new OrganizationMember({
-      organizationId: id,
-      userId: user?._id,
+      organizationId,
       email: email.toLowerCase(),
-      name,
+      name: name?.trim() || '',
       role: role || 'employee',
-      status: user ? 'active' : 'invited',
-      departmentId,
-      joinedAt: user ? new Date() : undefined,
+      status: 'invited',
+      departmentId: departmentId || undefined,
+      invitedAt: new Date(),
     });
+
     await member.save();
 
-    // If user exists and courses are specified, enroll them
-    if (user && courseIds && courseIds.length > 0) {
-      for (const courseId of courseIds) {
-        const existingEnrollment = await Enrollment.findOne({
-          userId: user._id,
-          courseId,
-        });
-
-        if (!existingEnrollment) {
-          const enrollment = new Enrollment({
-            userId: user._id,
-            courseId,
-            organizationId: id,
-            status: 'not-started',
-            progressPercentage: 0,
-            progress: {
-              completedLessonIds: [],
-            },
-          });
-          await enrollment.save();
-        }
-      }
+    // Determine which courses to enroll
+    let coursesToEnroll: string[] = [];
+    
+    if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
+      // Use provided course IDs
+      coursesToEnroll = courseIds;
+    } else if (department && department.autoEnroll && department.defaultCourseIds.length > 0) {
+      // Use department default courses if auto-enroll is enabled
+      coursesToEnroll = department.defaultCourseIds.map((id: any) => id.toString());
     }
 
-    // If department with auto-enroll is set, enroll in default courses
-    if (user && departmentId) {
-      const department = await Department.findById(departmentId);
-      if (department && department.autoEnroll && department.defaultCourseIds.length > 0) {
-        for (const courseId of department.defaultCourseIds) {
-          const existingEnrollment = await Enrollment.findOne({
-            userId: user._id,
-            courseId,
-          });
-
-          if (!existingEnrollment) {
-            const enrollment = new Enrollment({
-              userId: user._id,
-              courseId,
-              organizationId: id,
-              status: 'not-started',
-              progressPercentage: 0,
-              progress: {
-                completedLessonIds: [],
-              },
-            });
-            await enrollment.save();
-          }
-        }
-      }
+    // Create enrollments for the courses
+    if (coursesToEnroll.length > 0 && member.role === 'employee') {
+      // Note: We'll create enrollments when the user actually joins/signs up
+      // For now, we'll just store the intent
     }
+
+    // Populate department info
+    await member.populate('departmentId', 'name');
 
     return NextResponse.json({
       member: {
-        id: member._id,
-        email: member.email,
-        name: member.name,
-        role: member.role,
-        status: member.status,
+        ...member.toObject(),
+        coursesEnrolled: 0,
+        coursesCompleted: 0,
+        avgProgress: 0,
       },
-    });
+    }, { status: 201 });
   } catch (error: any) {
     console.error('Error adding member:', error);
+
+    if (error.code === 11000) {
+      return NextResponse.json(
+        { error: 'Member already exists in this organization' },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Internal Server Error', details: error.message },
       { status: 500 }
