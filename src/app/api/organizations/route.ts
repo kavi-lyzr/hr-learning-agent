@@ -3,6 +3,8 @@ import dbConnect from '@/lib/db';
 import Organization from '@/models/organization';
 import OrganizationMember from '@/models/organizationMember';
 import User from '@/models/user';
+import { createAgentsForOrganization } from '@/lib/lyzr-services';
+import { decrypt } from '@/lib/encryption';
 
 /**
  * GET /api/organizations
@@ -99,13 +101,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create organization with MongoDB _id
+    // Decrypt the user's API key to create agents
+    const ownerApiKey = decrypt(user.lyzrApiKey);
+
+    // Create Lyzr agents for this organization (uses owner's API key)
+    console.log(`Creating Lyzr agents for organization: ${name}`);
+    const agents = await createAgentsForOrganization(ownerApiKey, name);
+
+    // Create organization with agents
     const organization = new Organization({
       name,
       slug,
       ownerId: user._id, // Use MongoDB _id, not lyzrId
+      tutorAgent: agents.tutorAgent,
+      quizGeneratorAgent: agents.quizGeneratorAgent,
+      contentGeneratorAgent: agents.contentGeneratorAgent,
     });
     await organization.save();
+    console.log(`Organization created with agents: ${organization._id}`);
 
     // Add owner as admin member
     const membership = new OrganizationMember({

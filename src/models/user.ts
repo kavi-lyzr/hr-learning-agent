@@ -5,8 +5,7 @@ export interface IUser extends Document {
   email: string;
   name?: string;
   avatarUrl?: string;
-  lyzrApiKey: string; // Encrypted
-  credits: number;
+  lyzrApiKey: string; // Encrypted - used when creating organizations
   lastAccessedOrganization?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -19,7 +18,6 @@ const UserSchema = new Schema<IUser>({
   name: { type: String },
   avatarUrl: { type: String },
   lyzrApiKey: { type: String, required: true }, // Stored encrypted
-  credits: { type: Number, default: 0 },
   lastAccessedOrganization: { type: Schema.Types.ObjectId, ref: 'Organization' },
   schemaVersion: { type: Number, default: 1 },
 }, {

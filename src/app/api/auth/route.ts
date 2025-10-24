@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
-import User from '@/models/user';
-import OrganizationMember from '@/models/organizationMember';
-import { encrypt } from '@/lib/encryption';
+import { createOrUpdateUser } from '@/lib/lyzr-services';
 
 /**
- * POST /api/auth/callback
- * Handles Lyzr OAuth callback
+ * POST /api/auth
+ * Handles Lyzr OAuth authentication
  * Creates or updates user with their encrypted API key
+ * Note: Agents are NOT created here - they're created when an organization is created
  */
 export async function POST(request: Request) {
   await dbConnect();
@@ -23,40 +22,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Encrypt the API key before storing
-    const encryptedApiKey = encrypt(lyzrApiKey);
+    // Create or update user (without agents)
+    const user = await createOrUpdateUser(lyzrUser, lyzrApiKey);
+    console.log(`Successfully processed auth for user: ${user.email}`);
 
-    // Find or create user
-    let user = await User.findOne({ lyzrId: lyzrUser.id });
-
-    if (user) {
-      // Update existing user
-      user.email = lyzrUser.email;
-      user.name = lyzrUser.name || user.name;
-      user.avatarUrl = lyzrUser.avatarUrl || user.avatarUrl;
-      user.lyzrApiKey = encryptedApiKey; // Always update the API key
-      await user.save();
-      console.log(`Updated existing user: ${user.email}`);
-    } else {
-      // Create new user
-      user = new User({
-        lyzrId: lyzrUser.id,
-        email: lyzrUser.email,
-        name: lyzrUser.name || lyzrUser.email.split('@')[0],
-        avatarUrl: lyzrUser.avatarUrl,
-        lyzrApiKey: encryptedApiKey,
-        credits: 0,
-      });
-      await user.save();
-      console.log(`Created new user: ${user.email}`);
-    }
-
-    // Check if user belongs to any organizations
-    const memberships = await OrganizationMember.find({ userId: user._id })
-      .populate('organizationId')
-      .exec();
-
-    // Return user data with organization info
+    // Return simple user data
     return NextResponse.json({
       user: {
         id: user._id,
@@ -64,16 +34,8 @@ export async function POST(request: Request) {
         email: user.email,
         name: user.name,
         avatarUrl: user.avatarUrl,
-        credits: user.credits,
         lastAccessedOrganization: user.lastAccessedOrganization,
       },
-      organizations: memberships.map((m: any) => ({
-        id: m.organizationId._id,
-        name: m.organizationId.name,
-        slug: m.organizationId.slug,
-        role: m.role,
-        status: m.status,
-      })),
     });
   } catch (error: any) {
     console.error('Error in Lyzr auth callback:', error);
