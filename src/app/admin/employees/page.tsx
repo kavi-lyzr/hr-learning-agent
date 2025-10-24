@@ -465,7 +465,7 @@ export default function AdminEmployeesPage() {
                             <SelectValue placeholder="Select department" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">No Department</SelectItem>
+                            <SelectItem value="default">No Department</SelectItem>
                             {departments.map((dept) => (
                               <SelectItem key={dept._id} value={dept._id}>
                                 {dept.name}
@@ -733,7 +733,7 @@ export default function AdminEmployeesPage() {
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No Department</SelectItem>
+                      <SelectItem value="default">No Department</SelectItem>
                       {departments.map((dept) => (
                         <SelectItem key={dept._id} value={dept._id}>
                           {dept.name}
