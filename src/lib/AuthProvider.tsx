@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 import Cookies from 'js-cookie';
 
 export interface TokenData {
@@ -41,20 +41,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
 
-  const clearAuthData = () => {
+  // Prevent duplicate auth calls
+  const authCallInProgress = useRef(false);
+  const lastSuccessfulAuthCall = useRef<string | null>(null);
+
+  const clearAuthData = useCallback(() => {
     Cookies.remove('user_id');
     Cookies.remove('token');
     Cookies.remove('email');
     Cookies.remove('display_name');
+    Cookies.remove('current_organization');
     setIsAuthenticated(false);
     setUserId(null);
     setToken(null);
     setEmail(null);
     setDisplayName(null);
     setIsLoading(false);
-  };
+    authCallInProgress.current = false;
+    lastSuccessfulAuthCall.current = null;
+  }, []);
 
-  const setAuthData = (tokenData: TokenData, userEmail: string | null, userName: string | null) => {
+  const setAuthData = useCallback((tokenData: TokenData, userEmail: string | null, userName: string | null) => {
     setIsAuthenticated(true);
     setUserId(tokenData.user_id);
     setToken(tokenData.api_key);
@@ -64,20 +71,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Cookies.set('token', tokenData.api_key, { expires: 7 });
     if (userEmail) Cookies.set('email', userEmail, { expires: 7 });
     if (userName) Cookies.set('display_name', userName, { expires: 7 });
-  };
+  }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     if (typeof window === 'undefined') {
       setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
+    // Prevent duplicate calls
+    if (authCallInProgress.current) {
+      console.log('Auth check already in progress, skipping');
+      return;
+    }
+
+    authCallInProgress.current = true;
+
     try {
       const { default: lyzr } = await import('lyzr-agent');
+
+      // Silent check - don't trigger UI
       const tokenData = await lyzr.getKeys() as unknown as TokenData[];
 
       if (tokenData && tokenData[0]) {
+        const currentUserId = tokenData[0].user_id;
+
+        // Check if we already successfully synced this user
+        if (lastSuccessfulAuthCall.current === currentUserId) {
+          console.log('User already synced with backend, skipping duplicate API call');
+
+          // Just update local state without calling backend
+          let userEmail: string | null = null;
+          let userName: string | null = null;
+
+          try {
+            const userKeys = await lyzr.getKeysUser();
+            userEmail = userKeys?.data?.user?.email;
+            userName = userKeys?.data?.user?.name;
+          } catch (error) {
+            console.error('Error fetching user keys, proceeding with token data only.', error);
+          }
+
+          const nameFromEmail = userEmail ? userEmail.split('@')[0].charAt(0).toUpperCase() + userEmail.split('@')[0].slice(1) : 'User';
+          const finalUserName = userName || nameFromEmail;
+
+          setAuthData(tokenData[0], userEmail, finalUserName);
+          return;
+        }
+
         let userEmail: string | null = null;
         let userName: string | null = null;
 
@@ -92,7 +133,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const nameFromEmail = userEmail ? userEmail.split('@')[0].charAt(0).toUpperCase() + userEmail.split('@')[0].slice(1) : 'User';
         const finalUserName = userName || nameFromEmail;
 
-        // Sync with backend
+        // Sync with backend - only once per user session
+        console.log('Syncing user with backend...');
         const response = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -107,9 +149,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (response.ok) {
+          lastSuccessfulAuthCall.current = currentUserId;
+          console.log('✓ User successfully synced with backend');
+
           setAuthData(tokenData[0], userEmail, finalUserName);
 
-          // Redirect to organizations page after successful auth
+          // Redirect to organizations page after successful auth (only on first login)
           if (window.location.pathname === '/') {
             window.location.href = '/organizations';
           }
@@ -125,8 +170,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearAuthData();
     } finally {
       setIsLoading(false);
+      authCallInProgress.current = false;
     }
-  };
+  }, [clearAuthData, setAuthData]);
 
   const login = async () => {
     if (typeof window === 'undefined') return;
@@ -167,6 +213,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       if (typeof window === 'undefined') return;
+
+      // First, try to restore from cookies to avoid SDK flash
+      const savedUserId = Cookies.get('user_id');
+      const savedToken = Cookies.get('token');
+      const savedEmail = Cookies.get('email');
+      const savedDisplayName = Cookies.get('display_name');
+
+      if (savedUserId && savedToken) {
+        console.log('Restoring auth from cookies');
+        setIsAuthenticated(true);
+        setUserId(savedUserId);
+        setToken(savedToken);
+        setEmail(savedEmail || null);
+        setDisplayName(savedDisplayName || null);
+        setIsLoading(false);
+        // Mark as already synced to prevent API call
+        lastSuccessfulAuthCall.current = savedUserId;
+        return;
+      }
+
       try {
         const { default: lyzr } = await import('lyzr-agent');
 
@@ -201,7 +267,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     init();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, isLoading, userId, token, email, displayName, login, logout }}>

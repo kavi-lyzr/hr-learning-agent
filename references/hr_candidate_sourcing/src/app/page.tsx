@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -12,6 +13,8 @@ import { CandidateHoverCard } from "@/components/CandidateHoverCard";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/AuthProvider";
 import { toast } from "sonner";
+
+const DEFAULT_DEMO_URL = 'https://www.linkedin.com/posts/vidur-rajpal-2b143b1a8_juicebox-just-raised-30m-series-a-to-solve-ugcPost-7382782038371790848-BmmF';
 
 interface Message {
   id: string;
@@ -44,9 +47,9 @@ export default function Home() {
   const [currentTextIndex, setCurrentTextIndex] = useState(0);
   const [charIndex, setCharIndex] = useState(0);
   const [isTyping, setIsTyping] = useState(true);
-  const [selectedJD, setSelectedJD] = useState<{id: string, name: string} | null>(null);
+  const [selectedJD, setSelectedJD] = useState<{ id: string, name: string } | null>(null);
   const [jdDropdownOpen, setJdDropdownOpen] = useState(false);
-  const [availableJDs, setAvailableJDs] = useState<Array<{id: string, name: string}>>([]);
+  const [availableJDs, setAvailableJDs] = useState<Array<{ id: string, name: string }>>([]);
   const [isClient, setIsClient] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<Array<{
     sessionId: string;
@@ -69,20 +72,20 @@ export default function Home() {
     const tagPadding = 16; // px-2 = 8px on each side, so 16px total
     const closeButtonWidth = 24; // X button + padding
     const buffer = 24; // Small buffer for visual spacing
-    
+
     // More accurate character width calculation
     // Most characters are ~6-7px wide, but some are wider (W, M) and some narrower (i, l)
     const avgCharWidth = 6.5;
     const textWidth = jdTitle.length * avgCharWidth;
     const totalTagWidth = textWidth + tagPadding + closeButtonWidth + buffer;
-    
+
     // Cap the maximum width to prevent extremely long tags
     const maxTagWidth = 280;
     const actualTagWidth = Math.min(totalTagWidth, maxTagWidth);
-    
+
     // Ensure minimum padding for very short titles
     const minPadding = 80; // Minimum reasonable padding
-    
+
     // Return padding in pixels
     return Math.max(Math.ceil(actualTagWidth), minPadding);
   };
@@ -116,7 +119,7 @@ export default function Home() {
       if (response.ok) {
         const candidates = await response.json();
         console.log('[Modal] API Response:', candidates);
-        
+
         if (Array.isArray(candidates) && candidates.length > 0) {
           const fullCandidate = candidates[0];
           // Cache the result
@@ -137,7 +140,7 @@ export default function Home() {
   const openCandidateDetail = async (candidate: any) => {
     console.log('[Modal] Opening detail for candidate:', candidate);
     const publicId = candidate.public_id || candidate.id;
-    
+
     if (!publicId) {
       console.error('[Modal] No public_id found in candidate:', candidate);
       toast.error('Unable to load candidate details');
@@ -145,7 +148,7 @@ export default function Home() {
     }
 
     const fullDetails = await fetchCandidateDetails(publicId);
-    
+
     if (fullDetails) {
       console.log('[Modal] Setting selected candidate and opening modal');
       setSelectedCandidate(fullDetails);
@@ -163,12 +166,12 @@ export default function Home() {
     if (!messages.length || !messages[messages.length - 1]?.candidates) {
       return [];
     }
-    
+
     const candidates = messages[messages.length - 1].candidates;
     if (!candidates) return [];
-    
+
     const totalPages = Math.ceil((candidates?.length || 0) / profilesPerPage);
-    
+
     if (totalPages <= 5) {
       // Show all pages
       return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -194,11 +197,11 @@ export default function Home() {
       if (match.index > lastIndex) {
         parts.push(content.substring(lastIndex, match.index));
       }
-      
+
       // Add the clickable link with hover card
       const name = match[1];
       const urlOrId = match[2];
-      
+
       // Extract public_id from the URL
       let publicId = urlOrId;
       if (urlOrId.includes('linkedin.com/in/')) {
@@ -209,17 +212,17 @@ export default function Home() {
         // It's already a public_id
         publicId = urlOrId;
       }
-      
+
       // Find candidate in messageCandidates
-      const candidate = messageCandidates?.find(c => 
+      const candidate = messageCandidates?.find(c =>
         c.public_id === publicId || c.id === publicId
       );
-      
+
       // Determine if it's a full URL or just an ID
-      const finalUrl = urlOrId.startsWith('http') 
-        ? urlOrId 
+      const finalUrl = urlOrId.startsWith('http')
+        ? urlOrId
         : `https://www.linkedin.com/in/${urlOrId}`;
-      
+
       const linkElement = (
         <a
           href={finalUrl}
@@ -237,7 +240,7 @@ export default function Home() {
           {name}
         </a>
       );
-      
+
       // Wrap with hover card if we have candidate data
       if (candidate) {
         parts.push(
@@ -252,25 +255,89 @@ export default function Home() {
       } else {
         parts.push(<span key={match.index}>{linkElement}</span>);
       }
-      
+
       lastIndex = regex.lastIndex;
     }
-    
+
     // Add remaining text
     if (lastIndex < content.length) {
       parts.push(content.substring(lastIndex));
     }
-    
+
     return parts.length > 0 ? parts : content;
   };
-  
+
   const placeholderTexts = useMemo(() => [
     selectedJD ? "Find candidates who match this job description" : "Software engineers in the Bay Area with 2+ years of experience building AI Agents on Lyzr",
     selectedJD ? "Discover talent that fits your requirements perfectly" : "Data scientists in New York with 3+ years of experience in machine learning and Python",
     selectedJD ? "Source the best candidates for this role" : "Product managers in Seattle with 4+ years of experience in SaaS companies",
     selectedJD ? "Find qualified professionals for your team" : "DevOps engineers in Austin with 2+ years of experience in cloud infrastructure"
   ], [selectedJD]);
-  
+
+  // Function to rank candidates based on profile quality and completeness
+  const rankCandidates = (candidates: Message['candidates'], messageContent?: string) => {
+    if (!candidates) return [];
+    
+    return [...candidates].sort((a, b) => {
+      let scoreA = 0;
+      let scoreB = 0;
+
+      // HIGHEST PRIORITY: Check if the agent mentioned this candidate in the message
+      // This indicates the agent found them particularly relevant
+      if (messageContent) {
+        const mentionsA = messageContent.includes(a.name) || messageContent.includes(a.public_id);
+        const mentionsB = messageContent.includes(b.name) || messageContent.includes(b.public_id);
+        
+        // Get position in message (earlier = more important)
+        const posA = mentionsA ? messageContent.indexOf(a.name) : Infinity;
+        const posB = mentionsB ? messageContent.indexOf(b.name) : Infinity;
+        
+        if (mentionsA && !mentionsB) return -1; // A mentioned, B not = A wins
+        if (!mentionsA && mentionsB) return 1;  // B mentioned, A not = B wins
+        if (mentionsA && mentionsB) {
+          // Both mentioned, earlier in message is better
+          scoreA += 50 - (posA / messageContent.length) * 20; // Up to 50 points
+          scoreB += 50 - (posB / messageContent.length) * 20;
+        }
+      }
+
+      // Score based on profile completeness (more complete = better)
+      if (a.summary && a.summary.length > 100) scoreA += 15;
+      else if (a.summary && a.summary.length > 50) scoreA += 10;
+      
+      if (b.summary && b.summary.length > 100) scoreB += 15;
+      else if (b.summary && b.summary.length > 50) scoreB += 10;
+
+      // Score based on having education
+      if (a.education) scoreA += 8;
+      if (b.education) scoreB += 8;
+
+      // Score based on having company logo (indicates verified/established company)
+      if (a.companyLogo) scoreA += 5;
+      if (b.companyLogo) scoreB += 5;
+
+      // Score based on title specificity (longer, more detailed titles)
+      if (a.title && a.title.length > 20) scoreA += 4;
+      else if (a.title && a.title.length > 10) scoreA += 2;
+      
+      if (b.title && b.title.length > 20) scoreB += 4;
+      else if (b.title && b.title.length > 10) scoreB += 2;
+
+      // Score based on location specificity
+      if (a.location && a.location.length > 10) scoreA += 2;
+      else if (a.location && a.location.length > 5) scoreA += 1;
+      
+      if (b.location && b.location.length > 10) scoreB += 2;
+      else if (b.location && b.location.length > 5) scoreB += 1;
+
+      // Score based on company name presence
+      if (a.company && a.company.length > 5) scoreA += 3;
+      if (b.company && b.company.length > 5) scoreB += 3;
+
+      return scoreB - scoreA; // Higher score first
+    });
+  };
+
   const handleSearch = async (queryOverride?: string) => {
     const query = queryOverride || searchQuery;
     if (!query.trim()) return;
@@ -296,7 +363,7 @@ export default function Home() {
 
     try {
       console.log('[Chat] Sending message:', enhancedQuery);
-      
+
       // Check if user is authenticated
       if (!isAuthenticated || !userId || !email) {
         throw new Error('User not authenticated');
@@ -305,7 +372,7 @@ export default function Home() {
       // Call non-streaming chat API
       const response = await fetch('/api/chat/send', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_API_AUTH_TOKEN}`
         },
@@ -329,7 +396,7 @@ export default function Home() {
       const responseData = await response.json();
       const { response: agentResponse, sessionId } = responseData;
       console.log('[Chat] Received response, session:', sessionId);
-      
+
       // Set session ID if this is a new conversation
       if (!currentSessionId) {
         setCurrentSessionId(sessionId);
@@ -406,7 +473,7 @@ export default function Home() {
 
       setMessages(prev => [...prev, aiResponse]);
       setIsLoading(false);
-      
+
       // Scroll to bottom after adding message
       setTimeout(() => {
         const messagesContainer = document.querySelector('.overflow-y-auto');
@@ -414,14 +481,14 @@ export default function Home() {
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
       }, 100);
-      
+
       // Reload conversation history
       loadConversationHistory();
 
     } catch (error) {
       console.error('[Chat] Error:', error);
       toast.error('Failed to send message. Please try again.');
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: `I'm sorry, I encountered an error. Please try again. (${error})`,
@@ -430,7 +497,7 @@ export default function Home() {
       };
       setMessages(prev => [...prev, errorMessage]);
       setIsLoading(false);
-      
+
       // Scroll to bottom after adding error message
       setTimeout(() => {
         const messagesContainer = document.querySelector('.overflow-y-auto');
@@ -443,7 +510,12 @@ export default function Home() {
     setSearchQuery("");
   };
 
-  const handleToggleSave = async (candidatePublicId: string) => {
+  const handleToggleSave = async (candidatePublicId: string, event?: React.MouseEvent) => {
+    // Prevent event bubbling to parent container
+    if (event) {
+      event.stopPropagation();
+    }
+
     if (!currentSessionId) {
       toast.error("Cannot save profile without an active session.");
       return;
@@ -498,7 +570,7 @@ export default function Home() {
 
   const handleFollowUp = async (message: string) => {
     if (!message.trim()) return;
-    
+
     // Clear search query and directly call handleSearch with the message
     setSearchQuery("");
     await handleSearch(message);
@@ -515,14 +587,14 @@ export default function Home() {
 
       if (response.ok) {
         toast.success('Conversation deleted');
-        
+
         // If we're deleting the current session, reset the UI
         if (sessionId === currentSessionId) {
           setMessages([]);
           setShowChat(false);
           setCurrentSessionId(null);
         }
-        
+
         // Reload history
         loadConversationHistory();
       } else {
@@ -598,6 +670,7 @@ export default function Home() {
     setIsLoading(false);
     setCurrentSessionId(null);
     setCurrentSessionJdTitle(null);
+    setSelectedJD(null); // Clear the JD selection
     setCurrentPage(1); // Reset pagination
   };
 
@@ -605,7 +678,7 @@ export default function Home() {
     try {
       console.log(`Loading conversation: ${sessionId}`);
       setLoadingHistory(true);
-      
+
       const response = await fetch(`/api/chat/session/${sessionId}`, {
         headers: {
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_API_AUTH_TOKEN}`
@@ -615,11 +688,11 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         const session = data.session;
-        
+
         // Extract candidate profiles from toolResults
         const allProfiles = session.toolResults?.allProfiles || [];
         console.log(`Loading conversation with ${allProfiles.length} candidate profiles`);
-        
+
         // Convert conversation history to messages
         const loadedMessages: Message[] = session.conversationHistory.map((msg: any, index: number) => {
           const message: Message = {
@@ -628,7 +701,7 @@ export default function Home() {
             role: msg.role,
             timestamp: new Date(msg.timestamp),
           };
-          
+
           // Attach candidates to assistant messages that mention profiles
           if (msg.role === 'assistant' && allProfiles.length > 0) {
             // Check if this message contains candidate links
@@ -649,13 +722,24 @@ export default function Home() {
               }));
             }
           }
-          
+
           return message;
         });
 
         setMessages(loadedMessages);
         setCurrentSessionId(sessionId);
         setCurrentSessionJdTitle(session.attachedJdTitle || null);
+        
+        // Set the selectedJD state to display the JD tag
+        if (session.attachedJd && session.attachedJdTitle) {
+          setSelectedJD({
+            id: session.attachedJd,
+            name: session.attachedJdTitle
+          });
+        } else {
+          setSelectedJD(null);
+        }
+        
         setShowChat(true);
         setCurrentPage(1); // Reset pagination for new conversation
 
@@ -680,9 +764,9 @@ export default function Home() {
   // Typing animation effect - only on client
   useEffect(() => {
     if (!isClient || searchQuery.trim()) return; // Don't animate if user has typed something
-    
+
     const currentText = placeholderTexts[currentTextIndex];
-    
+
     if (isTyping) {
       if (charIndex < currentText.length) {
         const timer = setTimeout(() => {
@@ -713,11 +797,11 @@ export default function Home() {
 
   // Load JDs from API only when authenticated
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !userId) return;
 
     const fetchJDs = async () => {
       try {
-        const response = await fetch('/api/jds');
+        const response = await fetch(`/api/jds?userId=${userId}`);
         if (response.ok) {
           const jds = await response.json();
           setAvailableJDs(jds.map((jd: { _id: string; title: string }) => ({ id: jd._id, name: jd.title })));
@@ -731,7 +815,7 @@ export default function Home() {
 
     setIsClient(true);
     fetchJDs();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userId]);
 
   if (showChat) {
     return (
@@ -743,13 +827,13 @@ export default function Home() {
           <div className="absolute inset-0 bg-radial-fade"></div>
         </div>
         {/* Fixed Header with Controls */}
-        <div className="fixed top-20 right-4 z-30 flex items-center gap-2">
+        <div className="fixed top-20 right-2 md:right-4 z-30 flex items-center gap-2">
           {/* History dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2 bg-background/90 backdrop-blur-sm shadow-lg">
                 <History className="h-4 w-4" />
-                History
+                <span className="hidden sm:inline">History</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 max-h-64 overflow-y-auto">
@@ -762,7 +846,7 @@ export default function Home() {
                       onSelect={(e) => e.preventDefault()}
                       disabled={loadingHistory}
                     >
-                      <div 
+                      <div
                         className="flex-1 flex flex-col items-start gap-1 min-w-0"
                         onClick={() => !loadingHistory && loadConversation(conversation.sessionId)}
                       >
@@ -816,15 +900,15 @@ export default function Home() {
             className="gap-2 bg-background/90 backdrop-blur-sm shadow-lg"
           >
             <RefreshCw className="h-4 w-4" />
-            Reset
+            <span className="hidden sm:inline">Reset</span>
           </Button>
         </div>
 
         {/* Chat Interface */}
         <div className="relative z-10 flex flex-col h-[calc(100vh-100px)] overflow-hidden">
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto pt-32 pb-32">
-            <div className="max-w-4xl mx-auto px-4 space-y-6">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden pt-16 pb-20 md:pb-16">
+            <div className="w-full 2xl:max-w-5xl xl:max-w-6xl mx-auto px-2 sm:px-4 space-y-6 overflow-hidden">
               {/* JD Attachment Indicator */}
               {currentSessionJdTitle && messages.length > 0 && (
                 <div className="flex justify-center mb-4">
@@ -834,121 +918,121 @@ export default function Home() {
                   </div>
                 </div>
               )}
-              
+
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
+                  className={`flex gap-2 sm:gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up overflow-hidden`}
                 >
                   {message.role === 'assistant' && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Bot className="h-4 w-4 text-primary" />
+                    <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                     </div>
                   )}
                   <div
-                    className={`max-w-[70%] rounded-2xl px-4 py-3 ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
+                    className={`max-w-[calc(100%-2rem)] sm:max-w-[calc(85%-2rem)] lg:max-w-[70%] rounded-2xl px-3 sm:px-4 py-3 overflow-hidden ${message.role === 'user'
+                        ? 'bg-primary text-primary-foreground userchatcontent'
                         : 'bg-muted/60 border border-border/30 backdrop-blur-sm'
-                    }`}
+                      }`}
                   >
-                    <div className={`text-sm leading-relaxed whitespace-pre-wrap ${message.role === 'user' ? 'text-primary-foreground' : 'text-foreground'}`}>
+                    <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${message.role === 'user' ? 'text-primary-foreground userchatcontent' : 'text-foreground'}`}>
                       {message.role === 'assistant' ? renderMessageContent(message.content, message.candidates) : message.content}
                     </div>
                     {message.candidates && (
-                      <div className="mt-4 space-y-4">
+                      <div className="mt-4 space-y-4 overflow-hidden">
                         <h4 className="font-semibold text-primary mb-3">Top Recommendations</h4>
-                        {message.candidates.slice(0, 3).map((candidate) => (
-                            <div 
-                              key={candidate.id} 
-                              className="border rounded-lg p-4 bg-card/50 hover:bg-card transition-colors cursor-pointer"
-                              onClick={() => openCandidateDetail(candidate)}
-                            >
-                            <div className="flex items-start space-x-3">
+                        {rankCandidates(message.candidates, message.content).slice(0, 3).map((candidate) => (
+                          <div
+                            key={candidate.id}
+                            className="border rounded-lg p-3 sm:p-4 bg-card/50 hover:bg-card transition-colors cursor-pointer overflow-hidden"
+                            onClick={() => openCandidateDetail(candidate)}
+                          >
+                            <div className="flex items-start gap-2 sm:gap-3 min-w-0">
                               {/* Profile picture removed - LinkedIn API returns empty strings */}
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-2 mb-1">
-                                  <a 
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 min-w-0">
+                                  <a
                                     href={candidate.linkedinUrl || `https://www.linkedin.com/in/${candidate.public_id}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="font-semibold text-primary hover:text-primary/80 hover:underline"
+                                    className="font-semibold text-sm sm:text-base text-primary hover:text-primary/80 hover:underline truncate"
                                   >
                                     {candidate.name}
                                   </a>
-                                  <a 
+                                  <a
                                     href={candidate.linkedinUrl || `https://www.linkedin.com/in/${candidate.public_id}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="hover:opacity-80 transition-opacity"
+                                    className="hover:opacity-80 transition-opacity flex-shrink-0"
                                   >
-                          <Image 
-                            src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/1024px-LinkedIn_icon.svg.png" 
-                            alt="LinkedIn" 
+                                    <Image
+                                      src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/1024px-LinkedIn_icon.svg.png"
+                                      alt="LinkedIn"
                                       width={16}
                                       height={16}
-                          />
-                        </a>
-                    </div>
-                    <div className="flex items-center space-x-2 mb-1">
+                                      className="w-3 h-3 sm:w-4 sm:h-4"
+                                    />
+                                  </a>
+                                </div>
+                                <div className="flex items-start gap-2 mb-1 min-w-0">
                                   {candidate.companyLogo && (
-                        <Image
-                          src={candidate.companyLogo}
-                          alt={candidate.company}
-                          width={16}
-                          height={16}
-                          className="w-4 h-4 object-contain"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                          }}
-                        />
+                                    <Image
+                                      src={candidate.companyLogo}
+                                      alt={candidate.company}
+                                      width={16}
+                                      height={16}
+                                      className="w-3 h-3 sm:w-4 sm:h-4 object-contain flex-shrink-0 mt-0.5"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                      }}
+                                    />
                                   )}
-                                  <p className="text-sm text-foreground font-medium">{candidate.title}</p>
-                    </div>
-                    <div className="flex items-center space-x-2 mb-1">
-                                  <MapPin className="w-4 h-4 text-muted-foreground" />
-                                  <p className="text-sm text-muted-foreground">{candidate.location}</p>
-                    </div>
-                    {candidate.education && (
-                      <div className="flex items-center space-x-2 mb-2">
-                                    <School className="w-4 h-4 text-muted-foreground" />
-                                    <p className="text-sm text-muted-foreground">{candidate.education}</p>
-                      </div>
-                    )}
-                    <div className="mt-2">
-                      <div className="flex items-start space-x-2">
-                                    <Sparkles className="min-h-4 min-w-4 text-primary mt-0.5" />
-                                    <p className="text-sm text-muted-foreground italic line-clamp-8">{candidate.summary}</p>
+                                  <p className="text-xs sm:text-sm text-foreground font-medium break-words">{candidate.title}</p>
+                                </div>
+                                <div className="flex items-start gap-2 mb-1 min-w-0">
+                                  <MapPin className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                  <p className="text-xs sm:text-sm text-muted-foreground break-words">{candidate.location}</p>
+                                </div>
+                                {candidate.education && (
+                                  <div className="flex items-start gap-2 mb-2 min-w-0">
+                                    <School className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                    <p className="text-xs sm:text-sm text-muted-foreground break-words">{candidate.education}</p>
+                                  </div>
+                                )}
+                                <div className="mt-2 min-w-0">
+                                  <div className="flex items-start gap-2">
+                                    <Sparkles className="min-h-3 min-w-3 sm:min-h-4 sm:min-w-4 text-primary flex-shrink-0 mt-0.5" />
+                                    <p className="text-xs sm:text-sm text-muted-foreground italic line-clamp-8 break-words">{candidate.summary}</p>
                                   </div>
                                 </div>
                               </div>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 variant={savedProfiles.has(candidate.public_id) ? "default" : "outline"}
-                                className={`flex-shrink-0 ${savedProfiles.has(candidate.public_id) ? 'text-white' : 'text-primary border-primary hover:bg-primary/5'}`}
-                                onClick={() => handleToggleSave(candidate.public_id)}
+                                className={`flex-shrink-0 text-xs sm:text-sm ${savedProfiles.has(candidate.public_id) ? 'text-white' : 'text-primary border-primary hover:bg-primary/5'}`}
+                                onClick={(e) => handleToggleSave(candidate.public_id, e)}
                               >
-                                <Bookmark className={`w-4 h-4 mr-1 ${savedProfiles.has(candidate.public_id) ? 'fill-white' : ''}`} />
-                                {savedProfiles.has(candidate.public_id) ? "Saved" : "Save"}
+                                <Bookmark className={`w-3 h-3 sm:w-4 sm:h-4 mr-1 ${savedProfiles.has(candidate.public_id) ? 'fill-white' : ''}`} />
+                                <span className="hidden sm:inline">{savedProfiles.has(candidate.public_id) ? "Saved" : "Save"}</span>
                               </Button>
                             </div>
                           </div>
                         ))}
 
                         {/* All Profiles Section with Pagination */}
-                        <div className="mt-8">
-                          <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-lg font-medium text-foreground">All Profiles ({message.candidates?.length || 0})</h4>
+                        <div className="mt-8 overflow-hidden">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 overflow-hidden">
+                            <h4 className="text-base sm:text-lg font-medium text-foreground break-words">All Profiles ({message.candidates?.length || 0})</h4>
                             <div className="flex items-center gap-2">
-                              <div className="text-sm text-muted-foreground">
+                              <div className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                                 {message.candidates && (
                                   <>
                                     {Math.min((currentPage - 1) * profilesPerPage + 1, message.candidates.length)} - {Math.min(currentPage * profilesPerPage, message.candidates.length)} of {message.candidates.length}
                                   </>
                                 )}
                               </div>
-                              <Button
+                              {/* <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setFilterDialogOpen(true)}
@@ -956,22 +1040,23 @@ export default function Home() {
                               >
                                 <Settings className="w-4 h-4 mr-1" />
                                 Edit Filters
-                              </Button>
+                              </Button> */}
                             </div>
                           </div>
 
                           {/* Pagination Controls */}
                           {message.candidates && message.candidates.length > profilesPerPage && (
                             <div className="flex items-center justify-center mb-4">
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-1 sm:space-x-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                                   disabled={currentPage === 1}
+                                  className="px-2 sm:px-3"
                                 >
                                   <ChevronLeft className="h-4 w-4" />
-                                  Previous
+                                  <span className="hidden sm:inline ml-1">Previous</span>
                                 </Button>
 
                                 <div className="flex items-center space-x-1">
@@ -981,7 +1066,7 @@ export default function Home() {
                                       variant={currentPage === pageNumber ? "default" : "outline"}
                                       size="sm"
                                       onClick={() => setCurrentPage(pageNumber)}
-                                      className="min-w-8"
+                                      className="min-w-8 w-8 h-8 p-0"
                                     >
                                       {pageNumber}
                                     </Button>
@@ -993,15 +1078,16 @@ export default function Home() {
                                   size="sm"
                                   onClick={() => setCurrentPage(prev => message.candidates ? Math.min(Math.ceil(message.candidates.length / profilesPerPage), prev + 1) : prev)}
                                   disabled={currentPage === (message.candidates ? Math.ceil(message.candidates.length / profilesPerPage) : 1)}
+                                  className="px-2 sm:px-3"
                                 >
-                                  Next
+                                  <span className="hidden sm:inline mr-1">Next</span>
                                   <ChevronRight className="h-4 w-4" />
                                 </Button>
                               </div>
                             </div>
                           )}
 
-                          <div className="space-y-3">
+                          <div className="space-y-3 min-w-0">
                             {(() => {
                               if (!message.candidates) return null;
 
@@ -1010,100 +1096,100 @@ export default function Home() {
                               const paginatedCandidates = message.candidates.slice(startIndex, endIndex);
 
                               return paginatedCandidates.map((candidate) => (
-                              <div 
-                                key={candidate.id} 
-                                className="flex items-start space-x-3 p-4 border rounded-lg bg-card hover:bg-card/80 transition-colors cursor-pointer"
-                                onClick={(e) => {
-                                  // Don't trigger if clicking the save button
-                                  if ((e.target as HTMLElement).closest('button')) return;
-                                  openCandidateDetail(candidate);
-                                }}
-                              >
-                                {/* Company Logo */}
-                                <div className="flex-shrink-0 mt-1">
-                                  {candidate.companyLogo ? (
-                                    <Image
-                                      src={candidate.companyLogo}
-                                      alt={candidate.company}
-                                      width={24}
-                                      height={24}
-                                      className="w-6 h-6 object-contain rounded"
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                      }}
-                                    />
-                                  ) : (
-                                    <div className="w-6 h-6 bg-muted rounded flex items-center justify-center">
-                                      <span className="text-xs text-muted-foreground font-medium">
-                                        {candidate.company?.charAt(0) || '?'}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center space-x-2 mb-1">
-                                    <a 
-                                      href={candidate.linkedinUrl || `https://www.linkedin.com/in/${candidate.public_id}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="font-semibold text-primary hover:text-primary/80 hover:underline truncate"
-                                    >
-                                      {candidate.name}
-                                    </a>
-                                    <a 
-                                      href={candidate.linkedinUrl || `https://www.linkedin.com/in/${candidate.public_id}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="hover:opacity-80 transition-opacity flex-shrink-0"
-                                    >
-                                      <Image
-                                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/1024px-LinkedIn_icon.svg.png"
-                                        alt="LinkedIn"
-                                        width={14}
-                                        height={14}
-                                      />
-                                    </a>
-                                  </div>
-                                  <p className="text-sm text-foreground font-medium truncate mb-1">{candidate.title}</p>
-                                  <p className="text-sm text-muted-foreground truncate mb-2">{candidate.company}</p>
-                                  {candidate.summary && (
-                                    <p className="text-xs text-muted-foreground line-clamp-1">
-                                      {candidate.summary.length > 100 
-                                        ? `${candidate.summary.substring(0, 100)}...` 
-                                        : candidate.summary}
-                                    </p>
-                                  )}
-                                </div>
-                                
-                                <Button
-                                  size="sm"
-                                  variant={savedProfiles.has(candidate.public_id) ? "default" : "outline"}
-                                  className={`flex-shrink-0 ${savedProfiles.has(candidate.public_id) ? 'text-white' : 'text-primary border-primary hover:bg-primary/5'}`}
-                                  onClick={() => handleToggleSave(candidate.public_id)}
+                                <div
+                                  key={candidate.id}
+                                  className="flex items-start gap-2 sm:gap-3 p-3 sm:p-4 border rounded-lg bg-card hover:bg-card/80 transition-colors cursor-pointer overflow-hidden min-w-0"
+                                  onClick={(e) => {
+                                    // Don't trigger if clicking the save button
+                                    if ((e.target as HTMLElement).closest('button')) return;
+                                    openCandidateDetail(candidate);
+                                  }}
                                 >
-                                  <Bookmark className={`w-4 h-4 mr-1 ${savedProfiles.has(candidate.public_id) ? 'fill-white' : ''}`} />
-                                  {savedProfiles.has(candidate.public_id) ? "Saved" : "Save"}
-                                </Button>
-                              </div>
+                                  {/* Company Logo */}
+                                  <div className="flex-shrink-0 mt-1">
+                                    {candidate.companyLogo ? (
+                                      <Image
+                                        src={candidate.companyLogo}
+                                        alt={candidate.company}
+                                        width={24}
+                                        height={24}
+                                        className="w-5 h-5 sm:w-6 sm:h-6 object-contain rounded"
+                                        onError={(e) => {
+                                          const target = e.target as HTMLImageElement;
+                                          target.style.display = 'none';
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="w-5 h-5 sm:w-6 sm:h-6 bg-muted rounded flex items-center justify-center flex-shrink-0">
+                                        <span className="text-xs text-muted-foreground font-medium">
+                                          {candidate.company?.charAt(0) || '?'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1 min-w-0">
+                                      <a
+                                        href={candidate.linkedinUrl || `https://www.linkedin.com/in/${candidate.public_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-semibold text-sm sm:text-base text-primary hover:text-primary/80 hover:underline truncate"
+                                      >
+                                        {candidate.name}
+                                      </a>
+                                      <a
+                                        href={candidate.linkedinUrl || `https://www.linkedin.com/in/${candidate.public_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:opacity-80 transition-opacity flex-shrink-0"
+                                      >
+                                        <Image
+                                          src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/1024px-LinkedIn_icon.svg.png"
+                                          alt="LinkedIn"
+                                          width={14}
+                                          height={14}
+                                          className="w-3 h-3 sm:w-3.5 sm:h-3.5"
+                                        />
+                                      </a>
+                                    </div>
+                                    <p className="text-xs sm:text-sm text-foreground font-medium line-clamp-2 mb-1 break-words">{candidate.title}</p>
+                                    <p className="text-xs sm:text-sm text-muted-foreground truncate mb-2">{candidate.company}</p>
+                                    {candidate.summary && (
+                                      <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                                        {candidate.summary.length > 100
+                                          ? `${candidate.summary.substring(0, 100)}...`
+                                          : candidate.summary}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <Button
+                                    size="sm"
+                                    variant={savedProfiles.has(candidate.public_id) ? "default" : "outline"}
+                                    className={`flex-shrink-0 text-xs sm:text-sm ${savedProfiles.has(candidate.public_id) ? 'text-white' : 'text-primary border-primary hover:bg-primary/5'}`}
+                                    onClick={(e) => handleToggleSave(candidate.public_id, e)}
+                                  >
+                                    <Bookmark className={`w-3 h-3 sm:w-4 sm:h-4 ${savedProfiles.has(candidate.public_id) ? 'fill-white' : ''}`} />
+                                    <span className="hidden sm:inline ml-1">{savedProfiles.has(candidate.public_id) ? "Saved" : "Save"}</span>
+                                  </Button>
+                                </div>
                               ));
                             })()}
-                        </div>
+                          </div>
                         </div>
                       </div>
                     )}
-                    <p className={`text-xs mt-2 ${
-                      message.role === 'user'
+                    <p className={`text-xs mt-2 ${message.role === 'user'
                         ? 'opacity-60 text-primary-foreground/60'
                         : 'text-muted-foreground'
-                    }`}>
+                      }`}>
                       {message.timestamp.toLocaleTimeString()}
                     </p>
                   </div>
                   {message.role === 'user' && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      <User className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-muted flex items-center justify-center">
+                      <User className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                     </div>
                   )}
                 </div>
@@ -1132,7 +1218,7 @@ export default function Home() {
           </div>
 
           {/* Fixed Input Area at Bottom */}
-          <div className="fixed bottom-0 left-64 right-0 bg-background/80 backdrop-blur-sm border-t">
+          <div className="fixed bottom-12 md:bottom-0 left-0 md:left-64 right-0 bg-background/80 backdrop-blur-sm border-t">
             <div className="max-w-2xl mx-auto px-4 py-4">
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -1161,7 +1247,7 @@ export default function Home() {
                     }
                   }}
                   disabled={isLoading}
-                  className="h-12 w-12 p-0"
+                  className="h-12 w-12 p-0 flex-shrink-0"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -1171,8 +1257,8 @@ export default function Home() {
         </div>
 
         {/* Filter Dialog */}
-        <FilterDialog 
-          open={filterDialogOpen} 
+        <FilterDialog
+          open={filterDialogOpen}
           onOpenChange={setFilterDialogOpen}
           onSaveChanges={() => setFilterDialogOpen(false)}
         />
@@ -1186,7 +1272,7 @@ export default function Home() {
       </div>
     );
   }
-  
+
   return (
     <div className="h-[calc(100vh-100px)] bg-background animate-fade-in flex flex-col relative overflow-hidden">
       {/* Subtle Animated Grid Background */}
@@ -1196,13 +1282,13 @@ export default function Home() {
         <div className="absolute inset-0 bg-radial-fade"></div>
       </div>
       {/* Fixed Header with Controls */}
-      <div className="fixed top-20 right-4 z-30 flex items-center gap-2">
+      <div className="fixed top-20 right-2 md:right-4 z-30 flex items-center gap-2">
         {/* History dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="gap-2 bg-background/90 backdrop-blur-sm shadow-lg">
               <History className="h-4 w-4" />
-              History
+              <span className="hidden sm:inline">History</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64 max-h-64 overflow-y-auto">
@@ -1215,7 +1301,7 @@ export default function Home() {
                     onSelect={(e) => e.preventDefault()}
                     disabled={loadingHistory}
                   >
-                    <div 
+                    <div
                       className="flex-1 flex flex-col items-start gap-1 min-w-0"
                       onClick={() => !loadingHistory && loadConversation(conversation.sessionId)}
                     >
@@ -1270,7 +1356,7 @@ export default function Home() {
           className="gap-2 bg-background/90 backdrop-blur-sm shadow-lg disabled:opacity-50"
         >
           <RefreshCw className="h-4 w-4" />
-          Reset
+          <span className="hidden sm:inline">Reset</span>
         </Button>
       </div>
 
@@ -1280,73 +1366,73 @@ export default function Home() {
         <div className="text-center mb-6 animate-fade-in-up">
           <div className="flex items-center justify-center mb-4">
             <div className="w-20 h-16 flex items-center justify-center">
-              <Image 
-                src="https://i0.wp.com/www.lyzr.ai/wp-content/uploads/2024/11/cropped_lyzr_logo_1.webp?fit=452%2C180&ssl=1" 
-                alt="Lyzr Logo" 
+              <Image
+                src="https://i0.wp.com/www.lyzr.ai/wp-content/uploads/2024/11/cropped_lyzr_logo_1.webp?fit=452%2C180&ssl=1"
+                alt="Lyzr Logo"
                 width={80}
                 height={48}
-                className="h-12 w-auto object-contain dark:invert"
+                className="h-10 sm:h-12 w-auto object-contain dark:invert"
               />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Lyzr HR Candidate Sourcing Agent
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Find exactly who you&apos;re looking for, in seconds. 
-            <span className="text-primary cursor-pointer hover:underline ml-1">
+          <p className="text-muted-foreground text-base sm:text-lg px-2">
+            Find exactly who you&apos;re looking for, in seconds.
+            <a href={DEFAULT_DEMO_URL} target="_blank" rel="noopener noreferrer" className="text-primary cursor-pointer hover:underline ml-1">
               See how it works.
-            </span>
+            </a>
           </p>
         </div>
 
         {/* Clean Search Interface */}
-        <div className="w-full max-w-3xl space-y-4 animate-fade-in-up">
+        <div className="w-full max-w-3xl space-y-4 animate-fade-in-up px-2">
 
           {/* Main Search Input */}
           <div className="relative">
             <div className="relative">
               {selectedJD && (
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
-                  <span 
+                <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-10">
+                  <span
                     className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-primary/10 text-primary border border-primary/20"
                     style={{
-                      maxWidth: `${Math.min(selectedJD.name.length * 6.5 + 40, 280)}px`
+                      maxWidth: `${Math.min(selectedJD.name.length * 6.5 + 40, 200)}px`
                     }}
                     title={selectedJD.name}
                   >
                     <span className="truncate">@{selectedJD.name}</span>
-                    <button
+                    <Button
                       onClick={() => setSelectedJD(null)}
                       className="ml-1 hover:bg-primary/20 rounded-full p-0.5 flex-shrink-0"
                     >
                       <X className="h-4 w-4" />
-                    </button>
+                    </Button>
                   </span>
                 </div>
               )}
-            <Textarea
-              placeholder={searchQuery.trim() ? "" : (isClient ? placeholderText : "Search for candidates...")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (searchQuery.trim()) {
-                    handleSearch();
+              <Textarea
+                placeholder={searchQuery.trim() ? "" : (isClient ? placeholderText : "Search for candidates...")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (searchQuery.trim()) {
+                      handleSearch();
+                    }
                   }
-                }
-              }}
-              className={`min-h-14 max-h-32 text-base pr-24 border-2 border-border focus:border-primary rounded-lg shadow-sm resize-none bg-background/80 backdrop-blur-2xl`}
-              style={{
-                paddingLeft: selectedJD ? `${getJdTagPadding(selectedJD.name)}px` : '16px'
-              }}
-              rows={1}
-            />
+                }}
+                className={`min-h-14 max-h-32 text-sm sm:text-base pr-20 sm:pr-24 border-2 border-border focus:border-primary rounded-lg shadow-sm resize-none bg-background/80 backdrop-blur-2xl`}
+                style={{
+                  paddingLeft: selectedJD ? `${getJdTagPadding(selectedJD.name)}px` : '12px'
+                }}
+                rows={1}
+              />
             </div>
             <div className="absolute right-2 top-2">
-              <Button 
-                className="h-10 px-6"
+              <Button
+                className="h-10 px-4 sm:px-6 text-sm"
                 disabled={!searchQuery.trim()}
                 onClick={() => handleSearch()}
               >
@@ -1354,17 +1440,17 @@ export default function Home() {
               </Button>
             </div>
           </div>
-          
+
           {/* Select JD Button */}
           <div className="flex justify-end">
             <div className="relative">
-              <Button 
+              <Button
                 variant="outline"
                 onClick={() => setJdDropdownOpen(!jdDropdownOpen)}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 text-sm"
               >
-                {selectedJD?.name || "Select JD"}
-                <ChevronDown className="w-4 h-4" />
+                <span className="truncate max-w-[150px] sm:max-w-none">{selectedJD?.name || "Select JD"}</span>
+                <ChevronDown className="w-4 h-4 flex-shrink-0" />
               </Button>
               {jdDropdownOpen && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-lg shadow-lg z-10 min-w-48">
@@ -1372,9 +1458,9 @@ export default function Home() {
                     {availableJDs.length === 0 ? (
                       <>
                         <div className="text-sm text-muted-foreground p-2">No JDs uploaded yet</div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="w-full justify-start text-primary"
                           onClick={() => window.location.href = '/jd-library'}
                         >
@@ -1390,7 +1476,7 @@ export default function Home() {
                             size="sm"
                             className="w-full justify-start truncate max-w-full"
                             onClick={() => {
-                              setSelectedJD({id: jd.id, name: jd.name});
+                              setSelectedJD({ id: jd.id, name: jd.name });
                               setJdDropdownOpen(false);
                             }}
                           >
@@ -1398,9 +1484,9 @@ export default function Home() {
                           </Button>
                         ))}
                         <hr className="my-1" />
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="w-full justify-start text-primary"
                           onClick={() => window.location.href = '/jd-library'}
                         >
@@ -1446,8 +1532,8 @@ export default function Home() {
       </div>
 
       {/* Filter Dialog */}
-      <FilterDialog 
-        open={filterDialogOpen} 
+      <FilterDialog
+        open={filterDialogOpen}
         onOpenChange={setFilterDialogOpen}
         onSaveChanges={handleFilterSave}
       />

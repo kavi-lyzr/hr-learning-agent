@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   BookOpen,
   GraduationCap,
@@ -11,6 +12,7 @@ import {
   BarChart3,
   LogOut,
   ChevronUp,
+  Bot,
 } from "lucide-react";
 
 import {
@@ -80,6 +82,11 @@ const employeeNavItems = [
     url: "/employee/progress",
     icon: GraduationCap,
   },
+  {
+    title: "AI Assistant",
+    url: "/employee/ai-assistant",
+    icon: Bot,
+  },
 ];
 
 interface AppSidebarProps {
@@ -109,13 +116,12 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
               className="h-8 w-8 rounded"
             />
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground text-sm font-semibold">
-              L
-            </div>
+            <img src="/lyzr.png" alt="Lyzr L&D" className="h-8 w-8 rounded" />
           )}
           <div className="flex flex-col">
             <span className="text-sm font-semibold">
-              {organization?.name || "Lyzr L&D"}
+              {"Lyzr L&D"}
+              {/* organization?.name ||  */}
             </span>
             <span className="text-xs text-muted-foreground capitalize">
               {role} Portal
@@ -132,10 +138,10 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -150,10 +156,10 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <a href="/admin/settings">
+                    <Link href="/admin/settings">
                       <Settings className="h-4 w-4" />
                       <span>Settings</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

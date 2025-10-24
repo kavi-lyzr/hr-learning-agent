@@ -19,6 +19,47 @@ This is an AI-powered Learning & Development (L&D) platform for enterprises. It'
 - **Auth**: Lyzr Studio OAuth
 - **Notifications**: Sonner (toast library)
 
+## Critical Layout Patterns (MUST FOLLOW)
+
+### DO NOT duplicate layout components in pages
+- **NEVER** include `<SidebarProvider>`, `<AppSidebar>`, `<SiteHeader>`, or `<AiTutorPanel>` inside individual pages
+- These components are handled by the layout files (`/admin/layout.tsx` and `/employee/layout.tsx`)
+- Individual pages should ONLY return the `<main>` content area with proper styling:
+  ```tsx
+  export default function MyPage() {
+    return (
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
+        {/* Page content */}
+      </main>
+    );
+  }
+  ```
+
+### Use Next.js Link for navigation
+- **ALWAYS** use `<Link>` from `next/link` instead of `<a>` tags for internal navigation
+- This prevents full page reloads and provides smooth client-side transitions
+- Bad: `<a href="/admin/dashboard">Dashboard</a>`
+- Good: `<Link href="/admin/dashboard">Dashboard</Link>`
+
+### Organization Context Pattern
+- Organization state is managed by `OrganizationProvider` and stored in cookies
+- **DO NOT** use URL params like `?org=xxx` for organization tracking
+- Access organization via: `const { currentOrganization } = useOrganization();`
+- The layout files handle redirects if no organization is selected
+
+### Layout Structure
+```
+/admin/layout.tsx
+  └─ Wraps all /admin/* pages
+  └─ Includes: SidebarProvider, AppSidebar (role="admin"), SiteHeader
+  └─ NO AI Tutor Panel
+
+/employee/layout.tsx
+  └─ Wraps all /employee/* pages
+  └─ Includes: SidebarProvider, AppSidebar (role="employee"), SiteHeader, AiTutorPanel
+  └─ AI panel hidden on /employee/ai-assistant page
+```
+
 ## Development Commands
 
 ```bash

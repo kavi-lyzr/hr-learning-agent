@@ -28,6 +28,7 @@ import { useEffect, useState } from "react";
 interface Organization {
   id: string;
   name: string;
+  iconUrl?: string;
   role: 'admin' | 'employee';
 }
 
@@ -66,9 +67,9 @@ export function SiteHeader({ organization, breadcrumbs }: SiteHeaderProps) {
 
     // Navigate to the new view's dashboard
     if (newView === 'admin') {
-      router.push(`/admin/dashboard?org=${organization.id}`);
+      router.push('/admin/dashboard');
     } else {
-      router.push(`/employee/dashboard?org=${organization.id}`);
+      router.push('/employee/dashboard');
     }
   };
 
