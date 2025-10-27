@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { toast } from "sonner";
 import {
@@ -28,6 +30,7 @@ import {
   Download,
   FileText,
   Users,
+  BookOpen,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -40,6 +43,12 @@ interface Member {
   departmentId?: {
     _id: string;
     name: string;
+  };
+  userId?: {
+    _id: string;
+    name?: string;
+    email: string;
+    lyzrId: string;
   };
   coursesEnrolled: number;
   coursesCompleted: number;
@@ -56,6 +65,14 @@ interface Department {
   autoEnroll: boolean;
 }
 
+interface Course {
+  _id: string;
+  title: string;
+  category: string;
+  thumbnailUrl?: string;
+  status: string;
+}
+
 export default function AdminEmployeesPage() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
@@ -63,6 +80,7 @@ export default function AdminEmployeesPage() {
   const [activeTab, setActiveTab] = useState<'employees' | 'departments'>('employees');
   const [members, setMembers] = useState<Member[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -85,6 +103,9 @@ export default function AdminEmployeesPage() {
   const [editEmployeeOpen, setEditEmployeeOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Member | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
+  const [currentEnrollments, setCurrentEnrollments] = useState<string[]>([]);
+  const [originalDepartmentId, setOriginalDepartmentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentOrganization) {
@@ -128,6 +149,15 @@ export default function AdminEmployeesPage() {
     if (!response.ok) throw new Error('Failed to fetch departments');
     const data = await response.json();
     setDepartments(data.departments || []);
+  };
+
+  const fetchCourses = async () => {
+    if (!currentOrganization) return;
+
+    const response = await fetch(`/api/organizations/${currentOrganization.id}/courses`);
+    if (!response.ok) throw new Error('Failed to fetch courses');
+    const data = await response.json();
+    setCourses(data.courses?.filter((c: Course) => c.status === 'published') || []);
   };
 
   const handleAddEmployee = async () => {
@@ -216,9 +246,36 @@ export default function AdminEmployeesPage() {
     }
   };
 
-  const handleEditEmployee = (member: Member) => {
+  const handleEditEmployee = async (member: Member) => {
     setEditingEmployee(member);
+    setOriginalDepartmentId(member.departmentId?._id || null);
     setEditEmployeeOpen(true);
+
+    // Fetch courses if not already loaded
+    if (courses.length === 0) {
+      try {
+        await fetchCourses();
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+      }
+    }
+
+    // Fetch current enrollments for this employee
+    if (member.userId?.lyzrId && currentOrganization) {
+      try {
+        const response = await fetch(
+          `/api/enrollments?userId=${member.userId.lyzrId}&organizationId=${currentOrganization.id}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const enrolledCourseIds = data.enrollments.map((e: any) => e.courseId || e.course?._id);
+          setCurrentEnrollments(enrolledCourseIds);
+          setSelectedCourseIds(enrolledCourseIds);
+        }
+      } catch (error) {
+        console.error('Error fetching enrollments:', error);
+      }
+    }
   };
 
   const handleUpdateEmployee = async () => {
@@ -226,6 +283,8 @@ export default function AdminEmployeesPage() {
 
     try {
       setUpdating(true);
+
+      // Update employee basic info
       const response = await fetch(
         `/api/organizations/${currentOrganization.id}/members/${editingEmployee._id}`,
         {
@@ -243,15 +302,92 @@ export default function AdminEmployeesPage() {
         throw new Error(error.error || 'Failed to update employee');
       }
 
+      // Handle auto-enrollment if department changed
+      const departmentChanged = originalDepartmentId !== (editingEmployee.departmentId?._id || null);
+      let finalSelectedCourses = [...selectedCourseIds];
+
+      if (departmentChanged && editingEmployee.departmentId) {
+        const newDepartment = departments.find(d => d._id === editingEmployee.departmentId?._id);
+        if (newDepartment && newDepartment.autoEnroll && newDepartment.defaultCourseIds.length > 0) {
+          // Add department default courses to selection
+          const deptCourseIds = newDepartment.defaultCourseIds.map((c: any) => c._id || c);
+          finalSelectedCourses = [...new Set([...finalSelectedCourses, ...deptCourseIds])];
+        }
+      }
+
+      // Handle enrollment changes if userId exists
+      if (editingEmployee.userId?.lyzrId) {
+        await handleEnrollmentChanges(editingEmployee.userId.lyzrId, finalSelectedCourses);
+      }
+
       toast.success('Employee updated successfully!');
       setEditEmployeeOpen(false);
       setEditingEmployee(null);
+      setSelectedCourseIds([]);
+      setCurrentEnrollments([]);
+      setOriginalDepartmentId(null);
       fetchMembers();
     } catch (error: any) {
       console.error('Error updating employee:', error);
       toast.error(error.message || 'Failed to update employee');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleEnrollmentChanges = async (userId: string, newSelectedCourses: string[]) => {
+    if (!currentOrganization) return;
+
+    // Find courses to add (in newSelectedCourses but not in currentEnrollments)
+    const coursesToAdd = newSelectedCourses.filter(id => !currentEnrollments.includes(id));
+
+    // Find courses to remove (in currentEnrollments but not in newSelectedCourses)
+    const coursesToRemove = currentEnrollments.filter(id => !newSelectedCourses.includes(id));
+
+    // Create enrollments for new courses
+    for (const courseId of coursesToAdd) {
+      try {
+        const response = await fetch('/api/enrollments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            courseId,
+            organizationId: currentOrganization.id,
+          }),
+        });
+
+        // 409 means already enrolled - that's fine, skip it
+        if (!response.ok && response.status !== 409) {
+          throw new Error('Failed to create enrollment');
+        }
+      } catch (error) {
+        console.error(`Error enrolling in course ${courseId}:`, error);
+      }
+    }
+
+    // Remove enrollments for removed courses
+    if (coursesToRemove.length > 0) {
+      try {
+        const response = await fetch(
+          `/api/enrollments?userId=${userId}&organizationId=${currentOrganization.id}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          for (const courseId of coursesToRemove) {
+            const enrollment = data.enrollments.find(
+              (e: any) => (e.courseId || e.course?._id) === courseId
+            );
+            if (enrollment && enrollment._id) {
+              await fetch(`/api/enrollments/${enrollment._id}`, {
+                method: 'DELETE',
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error removing enrollments:', error);
+      }
     }
   };
 
@@ -696,7 +832,7 @@ export default function AdminEmployeesPage() {
         {/* Edit Employee Dialog */}
         {editingEmployee && (
           <Dialog open={editEmployeeOpen} onOpenChange={setEditEmployeeOpen}>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Edit Employee</DialogTitle>
                 <DialogDescription>
@@ -741,6 +877,70 @@ export default function AdminEmployeesPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {editingEmployee.departmentId && departments.find(d => d._id === editingEmployee.departmentId?._id)?.autoEnroll && (
+                    <p className="text-xs text-muted-foreground">
+                      This department has auto-enroll enabled. Department courses will be added automatically.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Assigned Courses</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Select courses to assign to this employee
+                  </p>
+                  {courses.length === 0 ? (
+                    <div className="text-sm text-muted-foreground p-4 border rounded-lg text-center">
+                      No published courses available
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-64 border rounded-lg p-4">
+                      <div className="space-y-3">
+                        {courses.map((course) => {
+                          const isFromDepartment = editingEmployee.departmentId &&
+                            departments
+                              .find(d => d._id === editingEmployee.departmentId?._id)
+                              ?.defaultCourseIds.some((c: any) => (c._id || c) === course._id);
+
+                          return (
+                            <div key={course._id} className="flex items-start gap-3 p-2 rounded hover:bg-muted/50">
+                              <Checkbox
+                                id={`course-${course._id}`}
+                                checked={selectedCourseIds.includes(course._id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedCourseIds([...selectedCourseIds, course._id]);
+                                  } else {
+                                    setSelectedCourseIds(selectedCourseIds.filter(id => id !== course._id));
+                                  }
+                                }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <label
+                                  htmlFor={`course-${course._id}`}
+                                  className="text-sm font-medium cursor-pointer flex items-center gap-2"
+                                >
+                                  <BookOpen className="h-4 w-4 flex-shrink-0" />
+                                  <span className="flex-1">{course.title}</span>
+                                  {isFromDepartment && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      From Dept
+                                    </Badge>
+                                  )}
+                                </label>
+                                <p className="text-xs text-muted-foreground capitalize mt-1">
+                                  {course.category.replace('-', ' ')}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {selectedCourseIds.length} course(s) selected
+                  </p>
                 </div>
               </div>
               <DialogFooter>

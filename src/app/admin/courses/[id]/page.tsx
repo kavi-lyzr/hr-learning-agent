@@ -176,7 +176,7 @@ export default function CourseDetailPage() {
     setModuleDialogOpen(true);
   };
 
-  const handleSaveModule = () => {
+  const handleSaveModule = async () => {
     if (!moduleFormData.title.trim()) {
       toast.error('Please enter a module title');
       return;
@@ -209,10 +209,34 @@ export default function CourseDetailPage() {
       setOpenModules(prev => new Set([...prev, newModule._id!]));
     }
 
-    setCourse({ ...course, modules: updatedModules });
-    setHasChanges(true);
-    setModuleDialogOpen(false);
-    toast.success(editingModule ? 'Module updated' : 'Module added');
+    // Auto-save to database immediately to prevent temp module errors
+    try {
+      setSaving(true);
+      const response = await fetch(`/api/courses/${courseId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: course.title,
+          description: course.description,
+          category: course.category,
+          status: course.status,
+          modules: updatedModules,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to save module');
+
+      const data = await response.json();
+      setCourse(data.course);
+      setHasChanges(false);
+      setModuleDialogOpen(false);
+      toast.success(editingModule ? 'Module updated' : 'Module added and saved');
+    } catch (error: any) {
+      console.error('Error saving module:', error);
+      toast.error('Failed to save module');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeleteModule = (moduleId: string) => {

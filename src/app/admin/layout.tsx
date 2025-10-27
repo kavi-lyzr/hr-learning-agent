@@ -20,6 +20,9 @@ export default function AdminLayout({
   useEffect(() => {
     if (!isLoading && !currentOrganization) {
       router.push('/organizations');
+    } else if (!isLoading && currentOrganization && currentOrganization.role !== 'admin') {
+      // Non-admins cannot access admin routes
+      router.push('/employee/dashboard');
     }
   }, [currentOrganization, isLoading, router]);
 

@@ -26,7 +26,7 @@ export async function GET(
     }
 
     const members = await OrganizationMember.find({ organizationId })
-      .populate('userId', 'name email avatarUrl')
+      .populate('userId', 'name email avatarUrl lyzrId')
       .populate('departmentId', 'name')
       .sort({ createdAt: -1 })
       .lean();

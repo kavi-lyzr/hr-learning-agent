@@ -1,227 +1,413 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { SiteHeader } from "@/components/site-header";
-import { AppSidebar } from "@/components/app-sidebar";
-import { AiTutorPanel } from "@/components/ai-tutor-panel";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useOrganization } from "@/lib/OrganizationProvider";
+import { useAuth } from "@/lib/AuthProvider";
+import { toast } from "sonner";
 import {
   BookOpen,
   Clock,
+  Award,
   PlayCircle,
-  CheckCircle,
-  Circle,
   FileText,
-  HelpCircle,
+  CheckCircle,
+  ArrowLeft,
+  Video,
 } from "lucide-react";
 
-interface Organization {
-  id: string;
-  name: string;
-  role: 'admin' | 'employee';
+interface Lesson {
+  _id: string;
+  title: string;
+  description?: string;
+  contentType: 'video' | 'article';
+  content: {
+    videoUrl?: string;
+    articleHtml?: string;
+  };
+  order: number;
+  estimatedDuration: number;
 }
 
-export default function EmployeeCourseViewPage() {
+interface Module {
+  _id: string;
+  title: string;
+  description?: string;
+  order: number;
+  lessons: Lesson[];
+}
+
+interface Course {
+  _id: string;
+  title: string;
+  description?: string;
+  category: string;
+  thumbnailUrl?: string;
+  estimatedDuration: number;
+  modules: Module[];
+  totalLessons: number;
+}
+
+interface Enrollment {
+  _id: string;
+  status: string;
+  progressPercentage: number;
+  progress: {
+    completedLessonIds: string[];
+    currentLessonId?: string;
+  };
+}
+
+export default function CourseDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const searchParams = useSearchParams();
   const courseId = params.id as string;
-  const orgId = searchParams.get('org');
+  const { currentOrganization } = useOrganization();
+  const { userId } = useAuth();
 
-  const [organization, setOrganization] = useState<Organization | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // TODO: Fetch from API
-  const course = {
-    id: courseId,
-    title: "Sales Training Fundamentals",
-    description: "Master the fundamentals of modern sales techniques and methodologies",
-    category: "Sales",
-    progress: 45,
-    estimatedTime: "8 hours",
-    instructor: "John Doe",
-  };
-
-  const modules = [
-    {
-      id: '1',
-      title: "Introduction to Sales",
-      lessons: [
-        { id: '1', title: "What is Sales?", type: "video", duration: "10 min", completed: true },
-        { id: '2', title: "Sales Process Overview", type: "article", duration: "5 min", completed: true },
-        { id: '3', title: "Quiz: Sales Basics", type: "quiz", duration: "10 min", completed: false },
-      ]
-    },
-    {
-      id: '2',
-      title: "Discovery Questions",
-      lessons: [
-        { id: '4', title: "Types of Questions", type: "video", duration: "15 min", completed: true },
-        { id: '5', title: "Asking Effective Questions", type: "video", duration: "12 min", completed: false },
-        { id: '6', title: "Practice Exercise", type: "article", duration: "8 min", completed: false },
-      ]
-    },
-    {
-      id: '3',
-      title: "Objection Handling",
-      lessons: [
-        { id: '7', title: "Common Objections", type: "video", duration: "20 min", completed: false },
-        { id: '8', title: "Handling Price Objections", type: "article", duration: "10 min", completed: false },
-        { id: '9', title: "Role Play Scenarios", type: "video", duration: "15 min", completed: false },
-        { id: '10', title: "Quiz: Objection Handling", type: "quiz", duration: "15 min", completed: false },
-      ]
-    },
-  ];
-
-  const totalLessons = modules.reduce((acc, mod) => acc + mod.lessons.length, 0);
-  const completedLessons = modules.reduce((acc, mod) =>
-    acc + mod.lessons.filter(l => l.completed).length, 0
-  );
+  const [course, setCourse] = useState<Course | null>(null);
+  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Fetch organization and course details from API
-    if (orgId) {
-      setTimeout(() => {
-        setOrganization({
-          id: orgId,
-          name: "Acme Corporation",
-          role: "employee",
+    if (currentOrganization && userId && courseId) {
+      fetchCourseData();
+    }
+  }, [currentOrganization, userId, courseId]);
+
+  const fetchCourseData = async () => {
+    if (!currentOrganization || !userId || !courseId) return;
+
+    try {
+      setLoading(true);
+
+      // Fetch course details
+      const courseResponse = await fetch(`/api/courses/${courseId}`);
+      if (!courseResponse.ok) throw new Error('Failed to fetch course');
+      const courseData = await courseResponse.json();
+
+      // Calculate total lessons
+      const totalLessons = courseData.course.modules.reduce(
+        (sum: number, module: Module) => sum + (module.lessons?.length || 0),
+        0
+      );
+      setCourse({ ...courseData.course, totalLessons });
+
+      // Fetch enrollment if exists
+      try {
+        const enrollmentsResponse = await fetch(
+          `/api/enrollments?userId=${userId}&organizationId=${currentOrganization.id}`
+        );
+        if (enrollmentsResponse.ok) {
+          const enrollmentsData = await enrollmentsResponse.json();
+          const currentEnrollment = enrollmentsData.enrollments.find(
+            (e: any) => (e.courseId || e.course?._id) === courseId
+          );
+          if (currentEnrollment) {
+            setEnrollment(currentEnrollment);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching enrollment:', error);
+      }
+    } catch (error: any) {
+      console.error('Error fetching course:', error);
+      toast.error('Failed to load course');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartCourse = async () => {
+    if (!userId || !currentOrganization || !course) return;
+
+    try {
+      // Create enrollment if doesn't exist
+      if (!enrollment) {
+        const response = await fetch('/api/enrollments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            courseId: course._id,
+            organizationId: currentOrganization.id,
+          }),
         });
-        setIsLoading(false);
-      }, 500);
-    }
-  }, [orgId]);
 
-  const getLessonIcon = (type: string, completed: boolean) => {
-    if (completed) {
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
-    }
-    switch (type) {
-      case 'video':
-        return <PlayCircle className="h-4 w-4 text-muted-foreground" />;
-      case 'article':
-        return <FileText className="h-4 w-4 text-muted-foreground" />;
-      case 'quiz':
-        return <HelpCircle className="h-4 w-4 text-muted-foreground" />;
-      default:
-        return <Circle className="h-4 w-4 text-muted-foreground" />;
+        // 409 means already enrolled - fetch the existing enrollment
+        if (response.status === 409) {
+          const data = await response.json();
+          if (data.enrollment) {
+            setEnrollment(data.enrollment);
+          }
+        } else if (!response.ok) {
+          throw new Error('Failed to enroll');
+        } else {
+          const data = await response.json();
+          setEnrollment(data.enrollment);
+        }
+      }
+
+      // Navigate to first lesson
+      if (course.modules.length > 0 && course.modules[0].lessons.length > 0) {
+        const firstLesson = course.modules[0].lessons[0];
+        router.push(`/employee/courses/${course._id}/lessons/${firstLesson._id}`);
+      }
+    } catch (error: any) {
+      console.error('Error starting course:', error);
+      toast.error('Failed to start course');
     }
   };
 
-  const handleLessonClick = (lessonId: string, moduleId: string) => {
-    router.push(`/employee/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}?org=${orgId}`);
+  const handleLessonClick = (lessonId: string) => {
+    router.push(`/employee/courses/${courseId}/lessons/${lessonId}`);
   };
 
-  if (isLoading) {
+  const isLessonCompleted = (lessonId: string) => {
+    return enrollment?.progress.completedLessonIds.includes(lessonId) || false;
+  };
+
+  if (loading) {
     return (
-      <main className="flex-1 overflow-y-auto p-8">
-        <Skeleton className="h-12 w-96 mb-4" />
-        <Skeleton className="h-24 w-full mb-8" />
-        <Skeleton className="h-96 w-full" />
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
+        <div className="max-w-5xl mx-auto space-y-6">
+          <Skeleton className="h-10 w-32" />
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-8 w-3/4 mb-2" />
+              <Skeleton className="h-4 w-1/2" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-20 w-full mb-4" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+          <Skeleton className="h-64 w-full" />
+        </div>
       </main>
-         
+    );
+  }
+
+  if (!course) {
+    return (
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
+        <div className="max-w-5xl mx-auto">
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <BookOpen className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Course not found</h3>
+                <p className="text-muted-foreground mb-4">
+                  This course may have been removed or you don't have access to it
+                </p>
+                <Button onClick={() => router.push('/employee/courses')}>
+                  Back to Courses
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </main>
     );
   }
 
   return (
-   
-    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full bg-muted/20">
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Back Button */}
+        <Button
+          variant="ghost"
+          className="gap-2"
+          onClick={() => router.push('/employee/courses')}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Courses
+        </Button>
+
         {/* Course Header */}
         <Card>
           <CardHeader>
-            <div className="flex items-start justify-between mb-2">
-              <Badge variant="secondary">{course.category}</Badge>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                {course.estimatedTime}
+            <div className="flex items-start gap-4">
+              {course.thumbnailUrl ? (
+                <img
+                  src={course.thumbnailUrl}
+                  alt={course.title}
+                  className="w-24 h-24 rounded-lg object-cover"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <BookOpen className="h-12 w-12 text-primary" />
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-2xl mb-2">{course.title}</CardTitle>
+                    <Badge variant="secondary" className="capitalize">
+                      {course.category.replace('-', ' ')}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <BookOpen className="h-4 w-4" />
+                    {course.totalLessons} lessons
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {course.estimatedDuration} min
+                  </span>
+                  {enrollment && (
+                    <span className="flex items-center gap-1">
+                      <Award className="h-4 w-4" />
+                      {enrollment.progressPercentage}% complete
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-            <CardTitle className="text-3xl">{course.title}</CardTitle>
-            <CardDescription className="text-base mt-2">
-              {course.description}
-            </CardDescription>
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {completedLessons} of {totalLessons} lessons completed
-                </span>
-                <span className="font-medium">{course.progress}%</span>
-              </div>
-              <Progress value={course.progress} className="h-2" />
             </div>
           </CardHeader>
+          <CardContent className="space-y-4">
+            {course.description && (
+              <p className="text-muted-foreground">{course.description}</p>
+            )}
+
+            {enrollment && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Your Progress</span>
+                  <span className="text-muted-foreground">
+                    {enrollment.progress.completedLessonIds.length} / {course.totalLessons} lessons completed
+                  </span>
+                </div>
+                <Progress value={enrollment.progressPercentage} className="h-2" />
+              </div>
+            )}
+
+            {!enrollment && (
+              <Button size="lg" className="w-full" onClick={handleStartCourse}>
+                <PlayCircle className="h-5 w-5 mr-2" />
+                Start Course
+              </Button>
+            )}
+          </CardContent>
         </Card>
 
         {/* Course Content */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">Course Content</CardTitle>
+            <CardTitle>Course Content</CardTitle>
           </CardHeader>
           <CardContent>
-            <Accordion type="single" collapsible className="w-full">
-              {modules.map((module, moduleIndex) => {
-                const moduleCompleted = module.lessons.filter(l => l.completed).length;
-                const moduleTotal = module.lessons.length;
+            {course.modules.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No modules or lessons available yet
+              </div>
+            ) : (
+              <Accordion type="multiple" className="w-full" defaultValue={course.modules.map(m => m._id)}>
+                {course.modules
+                  .sort((a, b) => a.order - b.order)
+                  .map((module) => {
+                    const moduleLessons = module.lessons || [];
+                    const completedInModule = moduleLessons.filter(l => isLessonCompleted(l._id)).length;
 
-                return (
-                  <AccordionItem key={module.id} value={module.id}>
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium">
-                            {moduleIndex + 1}
-                          </div>
-                          <div className="text-left">
-                            <div className="font-semibold">{module.title}</div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {moduleCompleted}/{moduleTotal} lessons
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-2 pl-11 pr-4 pt-2">
-                        {module.lessons.map((lesson) => (
-                          <div
-                            key={lesson.id}
-                            className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
-                            onClick={() => handleLessonClick(lesson.id, module.id)}
-                          >
-                            <div className="flex items-center gap-3">
-                              {getLessonIcon(lesson.type, lesson.completed)}
+                    return (
+                      <AccordionItem key={module._id} value={module._id}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center justify-between w-full pr-4">
+                            <div className="flex items-start gap-3 text-left">
+                              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                                <BookOpen className="h-5 w-5 text-primary" />
+                              </div>
                               <div>
-                                <div className="text-sm font-medium">{lesson.title}</div>
-                                <div className="text-xs text-muted-foreground capitalize">
-                                  {lesson.type} • {lesson.duration}
-                                </div>
+                                <h3 className="font-semibold">{module.title}</h3>
+                                {module.description && (
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    {module.description}
+                                  </p>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  {moduleLessons.length} lessons
+                                  {enrollment && ` " ${completedInModule} completed`}
+                                </p>
                               </div>
                             </div>
-                            {lesson.completed && (
-                              <Badge variant="outline" className="text-green-600 border-green-600">
-                                Completed
-                              </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="ml-14 space-y-2 mt-2">
+                            {moduleLessons.length === 0 ? (
+                              <p className="text-sm text-muted-foreground py-4">
+                                No lessons in this module yet
+                              </p>
+                            ) : (
+                              moduleLessons
+                                .sort((a, b) => a.order - b.order)
+                                .map((lesson) => {
+                                  const completed = isLessonCompleted(lesson._id);
+                                  const isCurrent = enrollment?.progress.currentLessonId === lesson._id;
+
+                                  return (
+                                    <div
+                                      key={lesson._id}
+                                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors hover:bg-muted/50 ${
+                                        isCurrent ? 'bg-primary/5 border-primary' : ''
+                                      }`}
+                                      onClick={() => handleLessonClick(lesson._id)}
+                                    >
+                                      <div className="flex-shrink-0 mt-0.5">
+                                        {completed ? (
+                                          <CheckCircle className="h-5 w-5 text-primary" />
+                                        ) : lesson.contentType === 'video' ? (
+                                          <Video className="h-5 w-5 text-muted-foreground" />
+                                        ) : (
+                                          <FileText className="h-5 w-5 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <h4 className="font-medium text-sm">{lesson.title}</h4>
+                                        {lesson.description && (
+                                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                            {lesson.description}
+                                          </p>
+                                        )}
+                                        <div className="flex items-center gap-3 mt-2">
+                                          <Badge variant="outline" className="text-xs capitalize">
+                                            {lesson.contentType}
+                                          </Badge>
+                                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <Clock className="h-3 w-3" />
+                                            {lesson.estimatedDuration} min
+                                          </span>
+                                          {isCurrent && (
+                                            <Badge variant="default" className="text-xs">
+                                              Current
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })
                             )}
                           </div>
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+              </Accordion>
+            )}
           </CardContent>
         </Card>
       </div>
     </main>
-    // ai panel should be here?? or layout?
   );
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Course from '@/models/course';
 import mongoose from 'mongoose';
+import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 
 /**
  * GET /api/courses/[id]
@@ -32,6 +33,15 @@ export async function GET(
         { error: 'Course not found' },
         { status: 404 }
       );
+    }
+
+    // Convert thumbnail to presigned URL if it's an S3 URL
+    if (course.thumbnailUrl && isS3Url(course.thumbnailUrl)) {
+      try {
+        course.thumbnailUrl = await getSignedImageUrl(course.thumbnailUrl);
+      } catch (error) {
+        console.error('Error getting signed URL for thumbnail:', error);
+      }
     }
 
     return NextResponse.json({ course });
