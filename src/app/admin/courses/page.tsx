@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
 import { toast } from "sonner";
+import { uploadImageToS3 } from "@/lib/s3-utils";
 import {
   BookOpen,
   Plus,
@@ -28,6 +29,9 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Upload,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -53,12 +57,15 @@ export default function AdminCoursesPage() {
   const [creating, setCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'archived'>('all');
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     category: 'other',
+    thumbnailPreview: '',
+    thumbnailUrl: '',
   });
 
   // Fetch courses
@@ -70,7 +77,7 @@ export default function AdminCoursesPage() {
 
   const fetchCourses = async () => {
     if (!currentOrganization) return;
-    
+
     try {
       setLoading(true);
       const response = await fetch(`/api/courses?organizationId=${currentOrganization.id}`);
@@ -83,6 +90,58 @@ export default function AdminCoursesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingThumbnail(true);
+
+      // Convert to base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+
+      const base64Image = await base64Promise;
+
+      // Set preview immediately
+      setFormData({ ...formData, thumbnailPreview: base64Image });
+
+      // Upload to S3
+      const s3Url = await uploadImageToS3(base64Image, `course-${Date.now()}.${file.name.split('.').pop()}`);
+
+      setFormData({
+        ...formData,
+        thumbnailPreview: base64Image,
+        thumbnailUrl: s3Url
+      });
+      toast.success('Thumbnail uploaded successfully!');
+    } catch (error: any) {
+      console.error('Error uploading thumbnail:', error);
+      toast.error('Failed to upload thumbnail');
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  };
+
+  const handleRemoveThumbnail = () => {
+    setFormData({ ...formData, thumbnailPreview: '', thumbnailUrl: '' });
   };
 
   const handleCreateCourse = async () => {
@@ -106,6 +165,7 @@ export default function AdminCoursesPage() {
           title: formData.title,
           description: formData.description,
           category: formData.category,
+          thumbnailUrl: formData.thumbnailUrl || undefined,
           createdBy: userId,
         }),
       });
@@ -118,7 +178,7 @@ export default function AdminCoursesPage() {
       const data = await response.json();
       toast.success('Course created successfully!');
       setCreateDialogOpen(false);
-      setFormData({ title: '', description: '', category: 'other' });
+      setFormData({ title: '', description: '', category: 'other', thumbnailPreview: '', thumbnailUrl: '' });
 
       // Navigate to course detail page to add modules
       router.push(`/admin/courses/${data.course._id}`);
@@ -270,6 +330,51 @@ export default function AdminCoursesPage() {
                         />
                       </div>
                       <div className="space-y-2">
+                        <Label>Course Thumbnail (optional)</Label>
+                        {formData.thumbnailPreview ? (
+                          <div className="relative w-full h-48 border rounded-lg overflow-hidden group">
+                            <img
+                              src={formData.thumbnailPreview}
+                              alt="Thumbnail preview"
+                              className="w-full h-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleRemoveThumbnail}
+                              className="absolute top-2 right-2 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                            {uploadingThumbnail && (
+                              <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              {uploadingThumbnail ? (
+                                <Loader2 className="h-10 w-10 mb-3 text-muted-foreground animate-spin" />
+                              ) : (
+                                <ImageIcon className="h-10 w-10 mb-3 text-muted-foreground" />
+                              )}
+                              <p className="mb-2 text-sm text-muted-foreground">
+                                <span className="font-semibold">Click to upload</span> or drag and drop
+                              </p>
+                              <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 5MB</p>
+                            </div>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/*"
+                              onChange={handleThumbnailChange}
+                              disabled={uploadingThumbnail}
+                            />
+                          </label>
+                        )}
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="category">Category</Label>
                         <Select 
                           value={formData.category}
@@ -380,13 +485,24 @@ export default function AdminCoursesPage() {
                       return matchesSearch && matchesStatus;
                     })
                     .map((course) => (
-                      <Card key={course._id} className="hover:shadow-lg transition-shadow">
+                      <Card key={course._id} className="hover:shadow-lg transition-shadow overflow-hidden">
+                        {(course as any).thumbnailUrl && (
+                          <div className="w-full h-48 bg-muted overflow-hidden">
+                            <img
+                              src={(course as any).thumbnailUrl}
+                              alt={course.title}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
                         <CardHeader>
                           <div className="flex items-start justify-between mb-2">
-                            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <BookOpen className="h-6 w-6 text-primary" />
-                            </div>
-                            <div className="flex items-center gap-2">
+                            {!(course as any).thumbnailUrl && (
+                              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <BookOpen className="h-6 w-6 text-primary" />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 ml-auto">
                               <Badge variant={course.status === 'published' ? 'default' : 'secondary'}>
                                 {course.status}
                               </Badge>

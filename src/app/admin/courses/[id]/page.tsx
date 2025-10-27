@@ -241,7 +241,7 @@ export default function CourseDetailPage() {
   };
 
   const handleEditLesson = (moduleId: string, lesson: Lesson) => {
-    router.push(`/admin/courses/${courseId}/lessons/${lesson._id}`);
+    router.push(`/admin/courses/${courseId}/lessons/${lesson._id}?moduleId=${moduleId}`);
   };
 
   const handleDeleteLesson = (moduleId: string, lessonId: string) => {

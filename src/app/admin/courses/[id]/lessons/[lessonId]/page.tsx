@@ -14,6 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import RTE from "@/components/RTE";
+import { convertToSignedUrls, convertToDirectUrls } from "@/lib/s3-utils";
 import {
   ChevronLeft,
   Loader2,
@@ -94,7 +96,7 @@ export default function LessonEditorPage() {
 
       // If editing existing lesson, load its data
       if (!isNew && lessonId) {
-        loadLessonData(data.course, lessonId);
+        await loadLessonData(data.course, lessonId);
       }
     } catch (error: any) {
       console.error('Error fetching course:', error);
@@ -105,17 +107,28 @@ export default function LessonEditorPage() {
     }
   };
 
-  const loadLessonData = (course: any, lessonId: string) => {
+  const loadLessonData = async (course: any, lessonId: string) => {
     for (const module of course.modules) {
-      const lesson = module.lessons.find((l: any) => l._id === lessonId);
+      const lesson = module.lessons.find((l: any) => String(l._id) === String(lessonId));
       if (lesson) {
+        // Convert S3 URLs to presigned URLs for editing
+        let articleContent = lesson.content.articleContent || null;
+        if (articleContent) {
+          try {
+            articleContent = await convertToSignedUrls(articleContent);
+          } catch (error) {
+            console.error('Error converting S3 URLs to presigned URLs:', error);
+            // Continue with original content if conversion fails
+          }
+        }
+
         setFormData({
           title: lesson.title,
           description: lesson.description || '',
           contentType: lesson.contentType,
           videoUrl: lesson.content.videoUrl || '',
           transcript: lesson.content.transcript || [],
-          articleContent: lesson.content.articleContent || null,
+          articleContent,
           articleHtml: lesson.content.articleHtml || '',
           duration: lesson.duration,
           hasQuiz: lesson.hasQuiz,
@@ -196,7 +209,7 @@ export default function LessonEditorPage() {
       return;
     }
 
-    if (!moduleId && isNew) {
+    if (!moduleId) {
       toast.error('Module ID is required');
       return;
     }
@@ -220,10 +233,24 @@ export default function LessonEditorPage() {
       setSaving(true);
 
       // Get the current module
-      const module = course.modules.find((m: any) => m._id === moduleId);
+      const module = course.modules.find((m: any) => String(m._id) === String(moduleId));
       if (!module) {
-        throw new Error('Module not found');
+        console.error('Module not found. moduleId:', moduleId, 'Available modules:', course.modules.map((m: any) => ({ id: m._id, title: m.title })));
+        toast.error(`Module not found. Please go back and try again.`);
+        return;
       }
+
+      // Find the existing lesson to preserve its order
+      let existingLessonOrder: number | undefined;
+      if (!isNew) {
+        const existingLesson = module.lessons.find((l: any) => String(l._id) === String(lessonId));
+        existingLessonOrder = existingLesson?.order;
+      }
+
+      // Convert presigned URLs back to direct URLs for storage
+      const articleContentForStorage = formData.articleContent
+        ? convertToDirectUrls(formData.articleContent)
+        : undefined;
 
       const lessonData = {
         title: formData.title,
@@ -232,17 +259,17 @@ export default function LessonEditorPage() {
         content: {
           videoUrl: formData.videoUrl || undefined,
           transcript: formData.transcript.length > 0 ? formData.transcript : undefined,
-          articleContent: formData.articleContent || undefined,
+          articleContent: articleContentForStorage,
           articleHtml: formData.articleHtml || undefined,
         },
         duration: formData.duration,
         hasQuiz: formData.hasQuiz,
-        order: isNew ? module.lessons.length : undefined,
+        order: isNew ? module.lessons.length : existingLessonOrder,
       };
 
       // Update the course with the new/updated lesson
       const updatedModules = course.modules.map((m: any) => {
-        if (m._id === moduleId) {
+        if (String(m._id) === String(moduleId)) {
           if (isNew) {
             return {
               ...m,
@@ -536,26 +563,23 @@ export default function LessonEditorPage() {
                     Article Content
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="p-8 border-2 border-dashed rounded-lg text-center">
-                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Rich Text Editor Coming Soon</h3>
-                    <p className="text-muted-foreground mb-4">
-                      The full rich text editor with image upload will be integrated here.
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      For now, you can use this basic textarea:
-                    </p>
-                  </div>
-                  <Textarea
-                    placeholder="Enter your article content here (temporary)..."
-                    rows={10}
-                    value={formData.articleHtml}
-                    onChange={(e) => {
-                      setFormData({ ...formData, articleHtml: e.target.value });
+                <CardContent>
+                  <RTE
+                    initialContent={formData.articleContent}
+                    showSubmitButton={false}
+                    onChange={(data) => {
+                      setFormData({
+                        ...formData,
+                        articleContent: data.json,
+                        articleHtml: data.html,
+                      });
                       setHasChanges(true);
                     }}
                   />
+                  <p className="text-sm text-muted-foreground mt-4">
+                    Drag and drop images, paste from clipboard, or use the image toolbar button to add images.
+                    All images are automatically uploaded to S3.
+                  </p>
                 </CardContent>
               </Card>
             )}

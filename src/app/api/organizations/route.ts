@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Organization from '@/models/organization';
 import OrganizationMember from '@/models/organizationMember';
+import Department from '@/models/department';
 import User from '@/models/user';
 import { createAgentsForOrganization } from '@/lib/lyzr-services';
 import { decrypt } from '@/lib/encryption';
@@ -130,6 +131,30 @@ export async function POST(request: Request) {
       joinedAt: new Date(),
     });
     await membership.save();
+
+    // Create default departments
+    const defaultDepartments = [
+      'Sales',
+      'Engineering',
+      'Product',
+      'Customer Success',
+      'HR',
+    ];
+
+    console.log(`Creating ${defaultDepartments.length} default departments for organization: ${organization._id}`);
+
+    const departmentPromises = defaultDepartments.map((deptName) =>
+      new Department({
+        organizationId: organization._id,
+        name: deptName,
+        description: '',
+        defaultCourseIds: [],
+        autoEnroll: false,
+      }).save()
+    );
+
+    await Promise.all(departmentPromises);
+    console.log(`Default departments created successfully`);
 
     // Update user's lastAccessedOrganization
     await User.findByIdAndUpdate(user._id, {

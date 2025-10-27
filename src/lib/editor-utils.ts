@@ -2,18 +2,16 @@
  * Utility functions for processing TipTap editor content
  */
 
-import { uploadImageToS3 } from "./s3-utils";
+import { uploadImageToS3, getSignedImageUrl } from "./s3-utils";
 
 /**
  * Process TipTap JSON content and upload base64 images to S3
- * Converts base64 images to direct S3 URLs (not presigned)
- * Store the returned content in your database
- * Use convertToSignedUrls() when displaying to users
+ * Converts base64 images to presigned S3 URLs for display
+ * Before saving to DB, use convertToDirectUrls() to strip query params
  * @param content - TipTap JSON content
- * @param organizationId - Organization ID for S3 prefix
- * @returns Processed content with direct S3 URLs (for storage)
+ * @returns Processed content with presigned S3 URLs (for display)
  */
-export async function processEditorImages(content: any, organizationId?: string): Promise<any> {
+export async function processEditorImages(content: any): Promise<any> {
 	if (!content) return content;
 
 	const processNode = async (node: any): Promise<any> => {
@@ -21,17 +19,19 @@ export async function processEditorImages(content: any, organizationId?: string)
 		if (node.type === "image" && node.attrs?.src) {
 			const src = node.attrs.src;
 
-			const fileName = organizationId
-				? `${organizationId}/lessons/image-${Date.now()}.png`
-				: `lessons/image-${Date.now()}.png`;
+			const fileName = `l&d-image-${Date.now()}.png`;
 
 			// Check if it's a base64 image
 			if (src.startsWith("data:image")) {
 				try {
-					// Upload to S3 and get direct URL (not presigned)
+					// Upload to S3 and get direct URL
 					const directUrl = await uploadImageToS3(src, fileName);
-					node.attrs.src = directUrl;
 					console.log("✅ Image uploaded to S3:", directUrl);
+
+					// Convert to presigned URL for immediate display
+					const presignedUrl = await getSignedImageUrl(directUrl);
+					node.attrs.src = presignedUrl;
+					console.log("🔐 Converted to presigned URL for display");
 				} catch (error: any) {
 					console.error("❌ Failed to upload image:", error.message || error);
 				}

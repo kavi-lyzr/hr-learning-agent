@@ -69,7 +69,7 @@ export async function convertToSignedUrls(content: any): Promise<any> {
 		// Process image nodes
 		if (node.type === "image" && node.attrs?.src) {
 			const src = node.attrs.src;
-
+			
 			// If it's a direct S3 URL (not already presigned), convert to presigned URL
 			if (isS3Url(src) && !src.includes('X-Amz-Signature')) {
 				try {
@@ -122,6 +122,184 @@ export async function uploadImageToS3(
 	// Returns direct S3 URL (not presigned)
 	// Store this in your database
 	return data.url;
+}
+
+/**
+ * Upload image to S3 and get full metadata
+ * @param base64Image - Base64 encoded image
+ * @param fileName - Optional custom filename
+ * @returns Object with direct S3 URL, key, bucket, and region
+ */
+export async function uploadImageToS3WithMetadata(
+	base64Image: string,
+	fileName?: string
+): Promise<{
+	url: string;      // Direct S3 URL (not presigned)
+	key: string;      // S3 object key
+	bucket: string;   // Bucket name
+	region: string;   // AWS region
+}> {
+	const response = await fetch("/api/upload-image", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ image: base64Image, fileName }),
+	});
+
+	if (!response.ok) {
+		const error = await response.json();
+		throw new Error(error.error || "Failed to upload image");
+	}
+
+	return await response.json();
+}
+
+/**
+ * Batch upload multiple images to S3
+ * @param images - Array of base64 images
+ * @returns Array of S3 URLs
+ */
+export async function batchUploadImages(
+	images: string[]
+): Promise<string[]> {
+	const uploadPromises = images.map((image) => uploadImageToS3(image));
+	return await Promise.all(uploadPromises);
+}
+
+/**
+ * Get image metadata from S3 URL
+ * @param url - S3 URL
+ * @returns Metadata object
+ */
+export function getImageMetadata(url: string): {
+	key: string | null;
+	bucket: string | null;
+	region: string | null;
+	filename: string | null;
+} {
+	const key = extractS3Key(url);
+	
+	// Extract bucket and region from URL
+	// Pattern: https://bucket-name.s3.region.amazonaws.com/key
+	const urlPattern = /https:\/\/([^.]+)\.s3\.([^.]+)\.amazonaws\.com/;
+	const match = url.match(urlPattern);
+	
+	const bucket = match ? match[1] : null;
+	const region = match ? match[2] : null;
+	const filename = key ? key.split("/").pop() || null : null;
+
+	return { key, bucket, region, filename };
+}
+
+/**
+ * Check if image exists (by attempting to fetch it)
+ * @param url - Image URL
+ * @returns true if image exists
+ */
+export async function imageExists(url: string): Promise<boolean> {
+	try {
+		const response = await fetch(url, { method: "HEAD" });
+		return response.ok;
+	} catch (error) {
+		return false;
+	}
+}
+
+/**
+ * Refresh presigned URL for an S3 object
+ * Useful when URLs are about to expire
+ * @param key - S3 object key
+ * @returns New presigned URL
+ */
+export async function refreshPresignedUrl(key: string): Promise<string> {
+	try {
+		const response = await fetch(`/api/get-image?key=${encodeURIComponent(key)}`);
+		if (!response.ok) {
+			throw new Error("Failed to refresh presigned URL");
+		}
+
+		const data = await response.json();
+		return data.url;
+	} catch (error) {
+		console.error("Error refreshing presigned URL:", error);
+		throw error;
+	}
+}
+
+/**
+ * Check if a presigned URL is expired or about to expire
+ * @param url - Presigned URL
+ * @returns true if expired or expiring soon (within 1 hour)
+ */
+export function isPresignedUrlExpiring(url: string): boolean {
+	try {
+		const urlObj = new URL(url);
+		const expiresParam = urlObj.searchParams.get('X-Amz-Expires');
+		const dateParam = urlObj.searchParams.get('X-Amz-Date');
+		
+		if (!expiresParam || !dateParam) {
+			// Not a presigned URL, assume it's valid
+			return false;
+		}
+
+		const expiresInSeconds = parseInt(expiresParam);
+		const signedDate = new Date(
+			dateParam.substring(0, 4) + '-' +
+			dateParam.substring(4, 6) + '-' +
+			dateParam.substring(6, 8) + 'T' +
+			dateParam.substring(9, 11) + ':' +
+			dateParam.substring(11, 13) + ':' +
+			dateParam.substring(13, 15) + 'Z'
+		);
+
+		const expirationDate = new Date(signedDate.getTime() + expiresInSeconds * 1000);
+		const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000);
+
+		return expirationDate < oneHourFromNow;
+	} catch (error) {
+		console.error("Error checking URL expiration:", error);
+		return false;
+	}
+}
+
+/**
+ * Process editor content and refresh any expiring presigned URLs
+ * @param content - TipTap JSON content
+ * @returns Content with refreshed URLs
+ */
+export async function refreshExpiringUrls(content: any): Promise<any> {
+	if (!content) return content;
+
+	const processNode = async (node: any): Promise<any> => {
+		if (node.type === "image" && node.attrs?.src) {
+			const src = node.attrs.src;
+			
+			// Check if it's a presigned URL that's expiring
+			if (isPresignedUrlExpiring(src)) {
+				try {
+					const key = extractS3Key(src);
+					if (key) {
+						console.log("🔄 Refreshing expiring presigned URL for:", key);
+						node.attrs.src = await refreshPresignedUrl(key);
+						console.log("✅ URL refreshed successfully");
+					}
+				} catch (error) {
+					console.error("Failed to refresh URL:", error);
+					// Keep original URL as fallback
+				}
+			}
+		}
+
+		// Recursively process child nodes
+		if (node.content && Array.isArray(node.content)) {
+			for (let i = 0; i < node.content.length; i++) {
+				node.content[i] = await processNode(node.content[i]);
+			}
+		}
+
+		return node;
+	};
+
+	return await processNode({ ...content });
 }
 
 /**
@@ -250,4 +428,38 @@ export async function cleanupRemovedImages(
 
 	const result = await batchDeleteImages(removedImages);
 	return result.succeeded;
+}
+
+/**
+ * Convert presigned S3 URLs to direct S3 URLs (for storage)
+ * Strips query parameters from presigned URLs
+ * @param content - TipTap JSON content with presigned URLs
+ * @returns Content with direct S3 URLs
+ */
+export function convertToDirectUrls(content: any): any {
+	if (!content) return content;
+
+	const processNode = (node: any): any => {
+		// Process image nodes
+		if (node.type === "image" && node.attrs?.src) {
+			const src = node.attrs.src;
+
+			// If it's a presigned URL (has query parameters), strip them
+			if (isS3Url(src) && src.includes('X-Amz-Signature')) {
+				// Remove query parameters to get direct URL
+				const url = new URL(src);
+				node.attrs.src = `${url.protocol}//${url.host}${url.pathname}`;
+				console.log("🔗 Converted presigned URL to direct URL for storage");
+			}
+		}
+
+		// Recursively process child nodes
+		if (node.content && Array.isArray(node.content)) {
+			node.content = node.content.map((child: any) => processNode(child));
+		}
+
+		return node;
+	};
+
+	return processNode({ ...content });
 }

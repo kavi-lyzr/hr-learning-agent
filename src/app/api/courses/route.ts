@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { organizationId, title, description, category, createdBy } = body;
+    const { organizationId, title, description, category, thumbnailUrl, createdBy } = body;
 
     // Validate required fields
     if (!organizationId || !title || !createdBy) {
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
       title,
       description: description || '',
       category: category || 'other',
+      thumbnailUrl: thumbnailUrl || undefined,
       status: 'draft',
       modules: [],
       estimatedDuration: 0,
