@@ -140,16 +140,18 @@ export default function CourseDetailPage() {
           }),
         });
 
-        // 409 means already enrolled - fetch the existing enrollment
+        // Handle response
+        const data = await response.json();
+
         if (response.status === 409) {
-          const data = await response.json();
+          // Already enrolled - that's fine, use the existing enrollment
           if (data.enrollment) {
             setEnrollment(data.enrollment);
           }
         } else if (!response.ok) {
-          throw new Error('Failed to enroll');
+          throw new Error(data.error || 'Failed to enroll');
         } else {
-          const data = await response.json();
+          // Successfully created
           setEnrollment(data.enrollment);
         }
       }

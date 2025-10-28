@@ -268,7 +268,13 @@ export default function AdminEmployeesPage() {
         );
         if (response.ok) {
           const data = await response.json();
-          const enrolledCourseIds = data.enrollments.map((e: any) => e.courseId || e.course?._id);
+          const enrolledCourseIds = data.enrollments.map((e: any) => {
+            // Handle both populated and non-populated courseId
+            if (typeof e.courseId === 'string') return e.courseId;
+            if (e.courseId?._id) return e.courseId._id;
+            if (e.course?._id) return e.course._id;
+            return null;
+          }).filter(Boolean);
           setCurrentEnrollments(enrolledCourseIds);
           setSelectedCourseIds(enrolledCourseIds);
         }
@@ -345,6 +351,9 @@ export default function AdminEmployeesPage() {
     const coursesToRemove = currentEnrollments.filter(id => !newSelectedCourses.includes(id));
 
     // Create enrollments for new courses
+    let successCount = 0;
+    let conflictCount = 0;
+
     for (const courseId of coursesToAdd) {
       try {
         const response = await fetch('/api/enrollments', {
@@ -357,13 +366,21 @@ export default function AdminEmployeesPage() {
           }),
         });
 
-        // 409 means already enrolled - that's fine, skip it
-        if (!response.ok && response.status !== 409) {
+        if (response.ok) {
+          successCount++;
+        } else if (response.status === 409) {
+          // Already enrolled - that's fine, count it as success
+          conflictCount++;
+        } else {
           throw new Error('Failed to create enrollment');
         }
       } catch (error) {
         console.error(`Error enrolling in course ${courseId}:`, error);
       }
+    }
+
+    if (successCount > 0 || conflictCount > 0) {
+      console.log(`✅ Enrollments: ${successCount} created, ${conflictCount} already existed`);
     }
 
     // Remove enrollments for removed courses

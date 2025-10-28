@@ -61,9 +61,11 @@ export async function GET(request: NextRequest) {
       let thumbnailUrl = course?.thumbnailUrl;
       if (thumbnailUrl && isS3Url(thumbnailUrl)) {
         try {
+          console.log('🔄 Converting thumbnail URL:', thumbnailUrl);
           thumbnailUrl = await getSignedImageUrl(thumbnailUrl);
+          console.log('✅ Converted to signed URL:', thumbnailUrl.substring(0, 100) + '...');
         } catch (error) {
-          console.error('Error getting signed URL for thumbnail:', error);
+          console.error('❌ Error getting signed URL for thumbnail:', error);
         }
       }
 

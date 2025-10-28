@@ -30,7 +30,7 @@ export function isS3Url(url: string): boolean {
 }
 
 /**
- * Get signed URL for private S3 image
+ * Get signed URL for private S3 image (Server-side only)
  * @param s3Url - Direct S3 URL
  * @returns Signed URL that works with private buckets
  */
@@ -41,6 +41,32 @@ export async function getSignedImageUrl(s3Url: string): Promise<string> {
 			throw new Error("Invalid S3 URL");
 		}
 
+		// If we're on the server, use the S3 SDK directly
+		if (typeof window === 'undefined') {
+			const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+			const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+
+			const s3Client = new S3Client({
+				region: process.env.AWS_REGION!,
+				credentials: {
+					accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+					secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+				},
+			});
+
+			const command = new GetObjectCommand({
+				Bucket: process.env.AWS_S3_BUCKET_NAME!,
+				Key: key,
+			});
+
+			const signedUrl = await getSignedUrl(s3Client, command, {
+				expiresIn: 7 * 24 * 60 * 60, // 7 days
+			});
+
+			return signedUrl;
+		}
+
+		// Client-side: call the API
 		const response = await fetch(`/api/get-image?key=${encodeURIComponent(key)}`);
 		if (!response.ok) {
 			throw new Error("Failed to get signed URL");
