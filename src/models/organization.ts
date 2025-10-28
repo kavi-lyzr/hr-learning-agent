@@ -5,16 +5,17 @@ export interface IOrganization extends Document {
   slug: string; // URL-friendly identifier
   iconUrl?: string;
   ownerId: mongoose.Types.ObjectId; // Reference to User (creator)
-  // Lyzr AI Agents (shared by all employees)
-  tutorAgent: {
+  // Lyzr AI Agents (shared by all employees, created after org setup)
+  tutorAgent?: {
+    agentId: string;
+    version: string;
+    toolIds?: string[]; // Tool IDs for custom tools
+  };
+  quizGeneratorAgent?: {
     agentId: string;
     version: string;
   };
-  quizGeneratorAgent: {
-    agentId: string;
-    version: string;
-  };
-  contentGeneratorAgent: {
+  contentGeneratorAgent?: {
     agentId: string;
     version: string;
   };
@@ -34,18 +35,19 @@ const OrganizationSchema = new Schema<IOrganization>({
   slug: { type: String, required: true, unique: true, lowercase: true },
   iconUrl: { type: String },
   ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  // Lyzr AI Agents (created using owner's API key)
+  // Lyzr AI Agents (created using owner's API key after org creation)
   tutorAgent: {
-    agentId: { type: String, required: true },
-    version: { type: String, required: true },
+    agentId: { type: String },
+    version: { type: String },
+    toolIds: [{ type: String }], // Tool IDs for custom tools
   },
   quizGeneratorAgent: {
-    agentId: { type: String, required: true },
-    version: { type: String, required: true },
+    agentId: { type: String },
+    version: { type: String },
   },
   contentGeneratorAgent: {
-    agentId: { type: String, required: true },
-    version: { type: String, required: true },
+    agentId: { type: String },
+    version: { type: String },
   },
   settings: {
     defaultTheme: { type: String, default: 'light' },

@@ -20,30 +20,66 @@ import {
 
 // Lyzr API endpoints
 const LYZR_AGENT_BASE_URL = 'https://agent-prod.studio.lyzr.ai';
-const AGENT_CREATION_ENDPOINT = `${LYZR_AGENT_BASE_URL}/v3/agents/template/single-task`;
-const AGENT_UPDATE_ENDPOINT = (agentId: string) => `${LYZR_AGENT_BASE_URL}/v3/agents/template/single-task/${agentId}`;
+const AGENT_CREATION_ENDPOINT = `${LYZR_AGENT_BASE_URL}/v3/agents`;
+const AGENT_UPDATE_ENDPOINT = (agentId: string) => `${LYZR_AGENT_BASE_URL}/v3/agents/${agentId}`;
+
+// --- Tool Descriptions ---
+
+/**
+ * Descriptions for Tutor agent tools (used in tool_configs action_names)
+ */
+const TOOL_DESCRIPTIONS = {
+    get_module_content: "Use this tool when the user asks about specific lesson content, module materials, or wants to know what topics are covered in a module. This tool fetches all lessons in a module including article text and video transcripts. Always call this tool when you need to reference or explain specific lesson materials.",
+    get_user_progress: "Use this tool when the user asks about their learning progress, completion status, quiz scores, or time spent on courses. This tool retrieves enrollment information, completed lessons, and quiz attempt data. Call this tool to check what courses they're enrolled in, which lessons they've completed, or how they performed on quizzes."
+};
+
+/**
+ * Get the appropriate tool description based on tool ID
+ */
+function getToolDescription(toolId: string): string {
+    if (toolId.includes('get_module_content')) {
+        return TOOL_DESCRIPTIONS.get_module_content;
+    } else if (toolId.includes('get_user_progress')) {
+        return TOOL_DESCRIPTIONS.get_user_progress;
+    }
+    return "Use this tool as needed";
+}
 
 // --- Agent Management ---
 
 /**
  * Create a new Lyzr agent
  */
-async function createLyzrAgent(apiKey: string, agentConfig: any, organizationName?: string): Promise<string> {
-    // Remove agentType from payload (internal use only)
-    const { agentType, ...configPayload } = agentConfig;
+async function createLyzrAgent(apiKey: string, agentConfig: any, organizationName?: string, toolIds?: string[]): Promise<string> {
+    // Remove agentType and tools from payload (internal use only)
+    const { agentType, tools, ...configPayload } = agentConfig;
 
     // Add organization suffix to agent name if provided
     const agentName = organizationName
         ? `${agentConfig.name} - ${organizationName}`
         : agentConfig.name;
 
+    // Create tool_configs array with action descriptions for each tool
+    const toolConfigs = toolIds ? toolIds.map(toolId => ({
+        tool_name: toolId,
+        tool_source: "openapi",
+        action_names: [getToolDescription(toolId)],
+        persist_auth: false
+    })) : [];
+
     const payload = {
         ...configPayload,
         name: agentName,
+        tools: toolIds || [], // Array of tool names
+        tool_configs: toolConfigs, // Detailed tool configuration with descriptions
         store_messages: true, // Enable message storage for conversation history
     };
 
     console.log(`Creating ${agentType} agent: ${agentName}`);
+    if (toolIds && toolIds.length > 0) {
+        console.log(`Attaching ${toolIds.length} tools:`, toolIds);
+        console.log(`Tool configs:`, toolConfigs);
+    }
 
     const response = await fetch(AGENT_CREATION_ENDPOINT, {
         method: 'POST',
@@ -140,6 +176,189 @@ export async function createOrUpdateUser(
     }
 }
 
+// --- Tool Management ---
+
+/**
+ * Create tools for Tutor agent
+ * Returns array of tool IDs
+ */
+export async function createTutorTools(
+    ownerApiKey: string,
+    organizationId: string,
+    organizationName: string
+): Promise<string[]> {
+    const toolSetName = `tutor_tools_${organizationId}`;
+
+    // Create encrypted context token for tool authentication
+    const contextToken = encrypt(JSON.stringify({
+        organizationId,
+        organizationName,
+    }));
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+    const toolsSpec = {
+        openapi: "3.0.0",
+        info: {
+            title: "Lyzr Tutor Tools API",
+            version: "1.0.0",
+            description: "Tools for the Lyzr Learning Tutor Agent"
+        },
+        servers: [
+            {
+                url: appUrl,
+                description: "Main application server"
+            }
+        ],
+        paths: {
+            "/api/tools/get_module_content": {
+                post: {
+                    summary: "Get complete module content with all lessons",
+                    operationId: "get_module_content",
+                    description: "Fetches all lessons in a module including article text and video transcripts",
+                    requestBody: {
+                        required: true,
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    required: ["moduleId"],
+                                    properties: {
+                                        moduleId: {
+                                            type: "string",
+                                            description: "The MongoDB ObjectId of the module"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    responses: {
+                        "200": {
+                            description: "Module content retrieved successfully",
+                            content: {
+                                "application/json": {
+                                    schema: {
+                                        type: "object",
+                                        properties: {
+                                            moduleId: { type: "string" },
+                                            moduleTitle: { type: "string" },
+                                            moduleDescription: { type: "string" },
+                                            lessons: {
+                                                type: "array",
+                                                items: {
+                                                    type: "object",
+                                                    properties: {
+                                                        lessonId: { type: "string" },
+                                                        title: { type: "string" },
+                                                        description: { type: "string" },
+                                                        contentType: { type: "string" },
+                                                        articleText: { type: "string" },
+                                                        transcript: { type: "string" },
+                                                        hasQuiz: { type: "boolean" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/api/tools/get_user_progress": {
+                post: {
+                    summary: "Get user's learning progress",
+                    operationId: "get_user_progress",
+                    description: "Fetches user's progress for courses, lessons, and quiz attempts",
+                    requestBody: {
+                        required: true,
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    required: ["userId"],
+                                    properties: {
+                                        userId: {
+                                            type: "string",
+                                            description: "The user's Lyzr ID"
+                                        },
+                                        courseId: {
+                                            type: "string",
+                                            description: "Optional: Filter by specific course"
+                                        },
+                                        moduleId: {
+                                            type: "string",
+                                            description: "Optional: Get progress for specific module"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    responses: {
+                        "200": {
+                            description: "Progress data retrieved successfully",
+                            content: {
+                                "application/json": {
+                                    schema: {
+                                        type: "object",
+                                        properties: {
+                                            enrollments: { type: "array" },
+                                            lessonProgress: { type: "object" },
+                                            quizAttempts: { type: "array" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    const requestData = {
+        tool_set_name: toolSetName,
+        openapi_schema: toolsSpec,
+        default_headers: {
+            'x-token': contextToken,
+        },
+        default_query_params: {},
+        default_body_params: {},
+        endpoint_defaults: {},
+        enhance_descriptions: false,
+        openai_api_key: null,
+    };
+
+    console.log(`Creating tools for Tutor agent: ${toolSetName}`);
+
+    const response = await fetch(`${LYZR_AGENT_BASE_URL}/v3/tools/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ownerApiKey,
+        },
+        body: JSON.stringify(requestData),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to create tools:', response.status, errorText);
+        throw new Error(`Failed to create tutor tools: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('Tool creation response:', data);
+
+    // Extract tool names from the response (tool_ids contains tool objects with 'name' field)
+    const toolNames = data.tool_ids ? data.tool_ids.map((tool: any) => tool.name) : [];
+    console.log('Extracted tool names:', toolNames);
+
+    return toolNames;
+}
+
 // --- Organization Agent Creation ---
 
 /**
@@ -148,27 +367,34 @@ export async function createOrUpdateUser(
  */
 export async function createAgentsForOrganization(
     ownerApiKey: string,
+    organizationId: string,
     organizationName: string
 ): Promise<{
-    tutorAgent: { agentId: string; version: string };
+    tutorAgent: { agentId: string; version: string; toolIds: string[] };
     quizGeneratorAgent: { agentId: string; version: string };
     contentGeneratorAgent: { agentId: string; version: string };
 }> {
     console.log(`Creating Lyzr agents for organization: ${organizationName}`);
 
+    // Create tools for Tutor agent
+    console.log('Creating tools for Tutor agent...');
+    const toolIds = await createTutorTools(ownerApiKey, organizationId, organizationName);
+    console.log(`✅ Successfully created ${toolIds.length} tools:`, toolIds);
+
     // Create all 3 agents in parallel for speed
     const [tutorAgentId, quizGeneratorAgentId, contentGeneratorAgentId] = await Promise.all([
-        createLyzrAgent(ownerApiKey, TUTOR_AGENT_CONFIG, organizationName),
+        createLyzrAgent(ownerApiKey, TUTOR_AGENT_CONFIG, organizationName, toolIds),
         createLyzrAgent(ownerApiKey, QUIZ_GENERATOR_AGENT_CONFIG, organizationName),
         createLyzrAgent(ownerApiKey, CONTENT_GENERATOR_AGENT_CONFIG, organizationName),
     ]);
 
-    console.log(`Successfully created all agents for organization: ${organizationName}`);
+    console.log(`✅ Successfully created all agents for organization: ${organizationName}`);
 
     return {
         tutorAgent: {
             agentId: tutorAgentId,
             version: LATEST_TUTOR_AGENT_VERSION,
+            toolIds,
         },
         quizGeneratorAgent: {
             agentId: quizGeneratorAgentId,

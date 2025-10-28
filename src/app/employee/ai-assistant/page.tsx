@@ -41,20 +41,54 @@ export default function EmployeeAIAssistantPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const messageContent = input;
     setInput("");
     setIsSending(true);
 
-    // TODO: Call API to get AI response
-    setTimeout(() => {
+    try {
+      // TODO: Get organizationId and userId from context/auth
+      const organizationId = 'temp-org-id';
+      const userId = 'temp-user-id';
+
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: messageContent,
+          organizationId,
+          userId,
+          context: {
+            currentPage: 'ai-assistant',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const data = await response.json();
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: "This is a placeholder response from the AI Learning Assistant. In production, this will be connected to the Lyzr Learning Tutor agent to provide context-aware, intelligent assistance based on your courses and learning progress.",
+        content: data.response,
         role: 'assistant',
         timestamp: new Date(),
       };
+
       setMessages(prev => [...prev, aiResponse]);
+    } catch (error: any) {
+      console.error('Error getting AI response:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "I'm sorry, I encountered an error. Please try again later.",
+        role: 'assistant',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsSending(false);
-    }, 1000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

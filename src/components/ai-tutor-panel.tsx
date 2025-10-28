@@ -25,9 +25,10 @@ export function AiTutorPanel() {
   ]);
   const [input, setInput] = useState("");
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || isSending) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -36,19 +37,55 @@ export function AiTutorPanel() {
       timestamp: new Date(),
     };
 
-    setMessages([...messages, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
+    const messageContent = input;
     setInput("");
+    setIsSending(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // TODO: Get organizationId and userId from context/auth
+      const organizationId = 'temp-org-id';
+      const userId = 'temp-user-id';
+
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: messageContent,
+          organizationId,
+          userId,
+          context: {
+            currentPage: 'dashboard',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const data = await response.json();
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: "This is a placeholder response. The AI tutor will be connected to the Lyzr Learning Tutor agent to provide context-aware assistance.",
+        content: data.response,
         role: 'assistant',
         timestamp: new Date(),
       };
+
       setMessages(prev => [...prev, aiResponse]);
-    }, 500);
+    } catch (error: any) {
+      console.error('Error getting AI response:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "I'm sorry, I encountered an error. Please try again.",
+        role: 'assistant',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (isMinimized) {
@@ -108,7 +145,7 @@ export function AiTutorPanel() {
                     : 'bg-muted'
                 }`}
               >
-                <p className="text-sm">{message.content}</p>
+                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                 <p className={`text-xs mt-1 ${
                   message.role === 'user'
                     ? 'text-primary-foreground/60'
@@ -127,6 +164,20 @@ export function AiTutorPanel() {
               )}
             </div>
           ))}
+          {isSending && (
+            <div className="flex gap-2 justify-start">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Bot className="h-3 w-3 text-primary" />
+              </div>
+              <div className="rounded-lg px-3 py-2 bg-muted">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
@@ -147,7 +198,7 @@ export function AiTutorPanel() {
           />
           <Button
             onClick={handleSend}
-            disabled={!input.trim()}
+            disabled={!input.trim() || isSending}
             size="icon"
           >
             <Send className="h-4 w-4" />

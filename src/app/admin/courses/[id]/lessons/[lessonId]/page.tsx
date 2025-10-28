@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import RTE from "@/components/RTE";
 import { convertToSignedUrls, convertToDirectUrls } from "@/lib/s3-utils";
@@ -26,7 +27,20 @@ import {
   AlertCircle,
   Eye,
   Edit3,
+  Wand2,
+  RefreshCw,
+  Trash2,
+  Plus,
+  Check,
+  X,
 } from "lucide-react";
+
+interface QuizQuestion {
+  questionText: string;
+  options: string[];
+  correctAnswerIndex: number;
+  explanation: string;
+}
 
 interface LessonFormData {
   title: string;
@@ -38,6 +52,9 @@ interface LessonFormData {
   articleHtml: string;
   duration: number;
   hasQuiz: boolean;
+  quizData: {
+    questions: QuizQuestion[];
+  } | null;
 }
 
 export default function LessonEditorPage() {
@@ -57,6 +74,12 @@ export default function LessonEditorPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
   const [editableTranscript, setEditableTranscript] = useState('');
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
+  const [generatingContent, setGeneratingContent] = useState(false);
+  const [contentPromptOpen, setContentPromptOpen] = useState(false);
+  const [contentPrompt, setContentPrompt] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
 
   const [formData, setFormData] = useState<LessonFormData>({
     title: '',
@@ -68,6 +91,7 @@ export default function LessonEditorPage() {
     articleHtml: '',
     duration: 0,
     hasQuiz: false,
+    quizData: null,
   });
 
   useEffect(() => {
@@ -132,6 +156,7 @@ export default function LessonEditorPage() {
           articleHtml: lesson.content.articleHtml || '',
           duration: lesson.duration,
           hasQuiz: lesson.hasQuiz,
+          quizData: lesson.quizData || null,
         });
         break;
       }
@@ -176,6 +201,138 @@ export default function LessonEditorPage() {
     const fullText = transcriptToEdit.map((t: any) => t.text).join(' ');
     setEditableTranscript(fullText);
     setTranscriptDialogOpen(true);
+  };
+
+  const handleGenerateContent = async () => {
+    if (!contentPrompt.trim()) {
+      toast.error('Please enter a description or prompt');
+      return;
+    }
+
+    try {
+      setGeneratingContent(true);
+      const organizationId = course.organizationId;
+      const userId = 'system'; // TODO: Get from auth context
+
+      const response = await fetch('/api/ai/generate-article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId,
+          userId,
+          lessonTitle: formData.title || 'Untitled Lesson',
+          userQuery: contentPrompt,
+          existingContent: isRefining ? formData.articleHtml : '',
+          wordCount: 600,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate content');
+      }
+
+      const data = await response.json();
+
+      // Convert markdown to HTML using markdown-utils
+      const { markdownToHtml } = await import('@/lib/markdown-utils');
+      const htmlContent = markdownToHtml(data.content);
+
+      // If refining, replace existing content; if generating, set new content
+      setFormData({
+        ...formData,
+        articleHtml: htmlContent,
+        articleContent: null, // Will be set when RTE processes it
+      });
+
+      setHasChanges(true);
+      setContentPromptOpen(false);
+      setContentPrompt('');
+      toast.success(isRefining ? 'Content refined successfully!' : 'Content generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating content:', error);
+      toast.error(error.message || 'Failed to generate content');
+    } finally {
+      setGeneratingContent(false);
+    }
+  };
+
+  const handleGenerateQuiz = async (numQuestions = 3) => {
+    // Validation
+    const hasContent = formData.articleHtml.trim() || formData.transcript.length > 0;
+    if (!hasContent) {
+      toast.error('Please add lesson content (article or video) before generating a quiz');
+      return;
+    }
+
+    try {
+      setGeneratingQuiz(true);
+
+      const organizationId = course.organizationId;
+      const userId = 'system'; // TODO: Get from auth context
+
+      const transcriptText = formData.transcript.map((t: any) => t.text).join(' ');
+
+      const response = await fetch('/api/ai/generate-quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId,
+          userId,
+          lessonTitle: formData.title || 'Untitled Lesson',
+          lessonContent: formData.articleHtml,
+          transcript: transcriptText,
+          numQuestions,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate quiz');
+      }
+
+      const data = await response.json();
+
+      setFormData({
+        ...formData,
+        hasQuiz: true,
+        quizData: { questions: data.quiz },
+      });
+      setHasChanges(true);
+      toast.success(`Generated ${data.quiz.length} quiz questions!`);
+    } catch (error: any) {
+      console.error('Error generating quiz:', error);
+      toast.error(error.message || 'Failed to generate quiz');
+    } finally {
+      setGeneratingQuiz(false);
+    }
+  };
+
+  const handleDeleteQuestion = (index: number) => {
+    if (!formData.quizData) return;
+
+    const updatedQuestions = formData.quizData.questions.filter((_, i) => i !== index);
+    setFormData({
+      ...formData,
+      quizData: { questions: updatedQuestions },
+      hasQuiz: updatedQuestions.length > 0,
+    });
+    setHasChanges(true);
+    toast.success('Question deleted');
+  };
+
+  const handleUpdateQuestion = (index: number, updates: Partial<QuizQuestion>) => {
+    if (!formData.quizData) return;
+
+    const updatedQuestions = formData.quizData.questions.map((q, i) =>
+      i === index ? { ...q, ...updates } : q
+    );
+
+    setFormData({
+      ...formData,
+      quizData: { questions: updatedQuestions },
+    });
+    setHasChanges(true);
   };
 
   const handleSaveTranscript = () => {
@@ -264,6 +421,7 @@ export default function LessonEditorPage() {
         },
         duration: formData.duration,
         hasQuiz: formData.hasQuiz,
+        quizData: formData.quizData || undefined,
         order: isNew ? module.lessons.length : existingLessonOrder,
       };
 
@@ -558,10 +716,40 @@ export default function LessonEditorPage() {
             {(formData.contentType === 'article' || formData.contentType === 'video-article') && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Article Content
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Article Content
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      {formData.articleHtml.trim() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setIsRefining(true);
+                            setContentPrompt('');
+                            setContentPromptOpen(true);
+                          }}
+                        >
+                          <Wand2 className="h-4 w-4 mr-2" />
+                          Refine with AI
+                        </Button>
+                      )}
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => {
+                          setIsRefining(false);
+                          setContentPrompt('');
+                          setContentPromptOpen(true);
+                        }}
+                      >
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Generate with AI
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <RTE
@@ -588,21 +776,308 @@ export default function LessonEditorPage() {
           <TabsContent value="quiz" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Quiz Generation (Coming Soon)</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <CardTitle>Knowledge Check Quiz</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Add an assessment to test learner comprehension
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Label htmlFor="enable-quiz" className="text-sm font-medium">
+                      Enable Quiz
+                    </Label>
+                    <Switch
+                      id="enable-quiz"
+                      checked={formData.hasQuiz}
+                      onCheckedChange={(checked) => {
+                        if (!checked && formData.quizData?.questions.length > 0) {
+                          if (!confirm('This will remove the quiz. Are you sure?')) {
+                            return;
+                          }
+                        }
+                        setFormData({
+                          ...formData,
+                          hasQuiz: checked,
+                          quizData: checked ? formData.quizData : null,
+                        });
+                        setHasChanges(true);
+                      }}
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="p-8 border-2 border-dashed rounded-lg text-center">
-                  <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">AI-Powered Quiz Generation</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Quiz generation will be integrated with Lyzr AI agents to automatically create
-                    assessment questions based on your lesson content.
-                  </p>
-                </div>
+                {!formData.hasQuiz ? (
+                  <div className="p-8 border-2 border-dashed rounded-lg text-center">
+                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Quiz Disabled</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Enable the quiz toggle above to add a knowledge check to this lesson
+                    </p>
+                  </div>
+                ) : !formData.quizData?.questions.length ? (
+                  <div className="space-y-6">
+                    <div className="p-8 border-2 border-dashed rounded-lg text-center">
+                      <Wand2 className="h-12 w-12 text-primary mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">Generate Quiz with AI</h3>
+                      <p className="text-muted-foreground mb-6">
+                        Our AI will analyze your lesson content and video transcript to create
+                        relevant assessment questions automatically.
+                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          onClick={() => handleGenerateQuiz(3)}
+                          disabled={generatingQuiz}
+                          size="lg"
+                        >
+                          {generatingQuiz ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Generating Questions...
+                            </>
+                          ) : (
+                            <>
+                              <Wand2 className="h-4 w-4 mr-2" />
+                              Generate 3 Questions
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          onClick={() => handleGenerateQuiz(5)}
+                          disabled={generatingQuiz}
+                          variant="outline"
+                          size="lg"
+                        >
+                          {generatingQuiz ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            'Generate 5 Questions'
+                          )}
+                        </Button>
+                      </div>
+                      {(!formData.articleHtml && !formData.transcript.length) && (
+                        <p className="text-sm text-amber-600 mt-4 flex items-center justify-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          Add lesson content first (article or video with transcript)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Quiz Header Actions */}
+                    <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Check className="h-5 w-5 text-green-600" />
+                        <span className="font-medium">
+                          {formData.quizData.questions.length} Question(s) Generated
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={() => handleGenerateQuiz(formData.quizData!.questions.length)}
+                          disabled={generatingQuiz}
+                          variant="outline"
+                          size="sm"
+                        >
+                          {generatingQuiz ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Regenerating...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Regenerate All
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Questions List */}
+                    <div className="space-y-4">
+                      {formData.quizData.questions.map((question, qIndex) => (
+                        <Card key={qIndex}>
+                          <CardHeader className="pb-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Badge variant="outline">Question {qIndex + 1}</Badge>
+                                </div>
+                                {editingQuestionIndex === qIndex ? (
+                                  <Textarea
+                                    value={question.questionText}
+                                    onChange={(e) =>
+                                      handleUpdateQuestion(qIndex, { questionText: e.target.value })
+                                    }
+                                    rows={2}
+                                    className="font-medium"
+                                  />
+                                ) : (
+                                  <p className="font-medium text-base">{question.questionText}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setEditingQuestionIndex(
+                                      editingQuestionIndex === qIndex ? null : qIndex
+                                    )
+                                  }
+                                >
+                                  {editingQuestionIndex === qIndex ? (
+                                    <Check className="h-4 w-4" />
+                                  ) : (
+                                    <Edit3 className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteQuestion(qIndex)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            {/* Options */}
+                            <div className="space-y-2">
+                              {question.options.map((option, oIndex) => (
+                                <div
+                                  key={oIndex}
+                                  className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-colors ${
+                                    question.correctAnswerIndex === oIndex
+                                      ? 'border-green-500 bg-green-50 dark:bg-green-950'
+                                      : 'border-border'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 pt-1">
+                                    {question.correctAnswerIndex === oIndex ? (
+                                      <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center">
+                                        <Check className="h-3 w-3 text-white" />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className="h-5 w-5 rounded-full border-2 border-muted-foreground cursor-pointer hover:border-green-500"
+                                        onClick={() =>
+                                          handleUpdateQuestion(qIndex, { correctAnswerIndex: oIndex })
+                                        }
+                                      />
+                                    )}
+                                    <span className="text-sm font-medium text-muted-foreground">
+                                      {String.fromCharCode(65 + oIndex)}
+                                    </span>
+                                  </div>
+                                  {editingQuestionIndex === qIndex ? (
+                                    <Input
+                                      value={option}
+                                      onChange={(e) => {
+                                        const newOptions = [...question.options];
+                                        newOptions[oIndex] = e.target.value;
+                                        handleUpdateQuestion(qIndex, { options: newOptions });
+                                      }}
+                                      className="flex-1"
+                                    />
+                                  ) : (
+                                    <span className="flex-1">{option}</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Explanation */}
+                            <div className="p-3 bg-muted/50 rounded-lg">
+                              <Label className="text-xs font-semibold text-muted-foreground uppercase mb-2 block">
+                                Explanation
+                              </Label>
+                              {editingQuestionIndex === qIndex ? (
+                                <Textarea
+                                  value={question.explanation}
+                                  onChange={(e) =>
+                                    handleUpdateQuestion(qIndex, { explanation: e.target.value })
+                                  }
+                                  rows={2}
+                                  className="bg-background"
+                                />
+                              ) : (
+                                <p className="text-sm">{question.explanation}</p>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Content Generation Dialog */}
+        <Dialog open={contentPromptOpen} onOpenChange={setContentPromptOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                {isRefining ? 'Refine Article Content' : 'Generate Article Content'}
+              </DialogTitle>
+              <DialogDescription>
+                {isRefining
+                  ? 'Describe how you want to improve or modify the existing content.'
+                  : 'Describe what you want the article to cover. Be specific about topics, key points, and target audience.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="content-prompt">
+                  {isRefining ? 'Refinement Instructions' : 'Content Description'}
+                </Label>
+                <Textarea
+                  id="content-prompt"
+                  value={contentPrompt}
+                  onChange={(e) => setContentPrompt(e.target.value)}
+                  rows={6}
+                  placeholder={
+                    isRefining
+                      ? 'e.g., Make it more concise, add examples about customer objections, improve the introduction...'
+                      : 'e.g., Explain the key principles of active listening in sales conversations, include practical examples and common mistakes to avoid...'
+                  }
+                  className="resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  The AI will use your lesson title "{formData.title || 'Untitled Lesson'}" as context.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setContentPromptOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleGenerateContent} disabled={generatingContent || !contentPrompt.trim()}>
+                {generatingContent ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {isRefining ? 'Refining...' : 'Generating...'}
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    {isRefining ? 'Refine Content' : 'Generate Content'}
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Transcript Editor Dialog */}
         <Dialog open={transcriptDialogOpen} onOpenChange={setTranscriptDialogOpen}>

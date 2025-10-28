@@ -5,9 +5,9 @@
  * Agents are versioned and automatically updated when version numbers change.
  */
 
-export const LATEST_TUTOR_AGENT_VERSION = '1.0.0';
-export const LATEST_QUIZ_GENERATOR_AGENT_VERSION = '1.0.0';
-export const LATEST_CONTENT_GENERATOR_AGENT_VERSION = '1.0.0';
+export const LATEST_TUTOR_AGENT_VERSION = '1.0.1';
+export const LATEST_QUIZ_GENERATOR_AGENT_VERSION = '1.0.1';
+export const LATEST_CONTENT_GENERATOR_AGENT_VERSION = '1.0.1';
 
 /**
  * Lyzr Tutor Agent (Employee-facing)
@@ -71,7 +71,7 @@ export const QUIZ_GENERATOR_AGENT_CONFIG = {
         type: "json_schema",
         json_schema: {
             name: "quiz_generation",
-            strict: false,
+            strict: true,
             schema: {
                 type: "object",
                 properties: {
@@ -81,25 +81,29 @@ export const QUIZ_GENERATOR_AGENT_CONFIG = {
                         items: {
                             type: "object",
                             properties: {
-                                question: {
+                                questionText: {
                                     type: "string",
                                     description: "The question text"
                                 },
                                 options: {
                                     type: "array",
                                     items: { type: "string" },
-                                    description: "Array of answer options"
+                                    minItems: 4,
+                                    maxItems: 4,
+                                    description: "Exactly 4 answer options"
                                 },
-                                correctAnswer: {
+                                correctAnswerIndex: {
                                     type: "integer",
-                                    description: "Index of the correct answer (0-based)"
+                                    minimum: 0,
+                                    maximum: 3,
+                                    description: "Index of the correct answer (0-3)"
                                 },
                                 explanation: {
                                     type: "string",
                                     description: "Explanation of why the correct answer is right"
                                 }
                             },
-                            required: ["question", "options", "correctAnswer", "explanation"],
+                            required: ["questionText", "options", "correctAnswerIndex", "explanation"],
                             additionalProperties: false
                         }
                     }
