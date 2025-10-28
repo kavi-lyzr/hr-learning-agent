@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Course from '@/models/course';
 import User from '@/models/user';
+import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 
 /**
  * GET /api/courses?organizationId=xxx
@@ -26,12 +27,25 @@ export async function GET(request: NextRequest) {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Calculate total lessons for each course
-    const coursesWithStats = courses.map((course: any) => ({
-      ...course,
-      totalModules: course.modules?.length || 0,
-      totalLessons: course.modules?.reduce((sum: number, module: any) =>
-        sum + (module.lessons?.length || 0), 0) || 0,
+    // Calculate total lessons and convert thumbnails to presigned URLs
+    const coursesWithStats = await Promise.all(courses.map(async (course: any) => {
+      // Convert thumbnail to presigned URL if it's an S3 URL
+      let thumbnailUrl = course.thumbnailUrl;
+      if (thumbnailUrl && isS3Url(thumbnailUrl)) {
+        try {
+          thumbnailUrl = await getSignedImageUrl(thumbnailUrl);
+        } catch (error) {
+          console.error('Error getting signed URL for thumbnail:', error);
+        }
+      }
+
+      return {
+        ...course,
+        thumbnailUrl,
+        totalModules: course.modules?.length || 0,
+        totalLessons: course.modules?.reduce((sum: number, module: any) =>
+          sum + (module.lessons?.length || 0), 0) || 0,
+      };
     }));
 
     return NextResponse.json({ courses: coursesWithStats });

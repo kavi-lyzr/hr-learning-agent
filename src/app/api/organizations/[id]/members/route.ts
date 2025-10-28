@@ -34,11 +34,18 @@ export async function GET(
     // Get enrollment counts for each member
     const membersWithStats = await Promise.all(
       members.map(async (member: any) => {
-        if (member.role === 'employee' && member.userId) {
+        // Calculate enrollments for any member with a userId (both employees and admins)
+        if (member.userId) {
+          // member.userId is populated, so we need to use the _id
+          const userMongoId = member.userId._id;
+          console.log('🔍 Fetching enrollments for user:', userMongoId, 'role:', member.role);
+
           const enrollments = await Enrollment.find({
-            userId: member.userId,
+            userId: userMongoId,
             organizationId
           }).lean();
+
+          console.log('📊 Found enrollments:', enrollments.length, 'for user:', member.userId.email);
 
           const completed = enrollments.filter(e => e.status === 'completed').length;
           const inProgress = enrollments.filter(e => e.status === 'in-progress').length;
@@ -55,6 +62,7 @@ export async function GET(
           };
         }
 
+        // For invited members without userId yet
         return {
           ...member,
           coursesEnrolled: 0,

@@ -384,6 +384,8 @@ export default function AdminEmployeesPage() {
     }
 
     // Remove enrollments for removed courses
+    let removedCount = 0;
+
     if (coursesToRemove.length > 0) {
       try {
         const response = await fetch(
@@ -391,20 +393,34 @@ export default function AdminEmployeesPage() {
         );
         if (response.ok) {
           const data = await response.json();
+
           for (const courseId of coursesToRemove) {
-            const enrollment = data.enrollments.find(
-              (e: any) => (e.courseId || e.course?._id) === courseId
-            );
+            // Handle both populated and non-populated courseId
+            const enrollment = data.enrollments.find((e: any) => {
+              const enrollmentCourseId = typeof e.courseId === 'string'
+                ? e.courseId
+                : (e.courseId?._id || e.course?._id);
+              return enrollmentCourseId === courseId;
+            });
+
             if (enrollment && enrollment._id) {
-              await fetch(`/api/enrollments/${enrollment._id}`, {
+              const deleteResponse = await fetch(`/api/enrollments/${enrollment._id}`, {
                 method: 'DELETE',
               });
+
+              if (deleteResponse.ok) {
+                removedCount++;
+              }
             }
           }
         }
       } catch (error) {
         console.error('Error removing enrollments:', error);
       }
+    }
+
+    if (removedCount > 0) {
+      console.log(`✅ Removed ${removedCount} enrollment(s)`);
     }
   };
 
