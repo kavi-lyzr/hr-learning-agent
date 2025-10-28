@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     // Update enrollment progress
     if (status === 'completed') {
-      await updateEnrollmentProgress(user._id, courseId, lessonId);
+      await updateEnrollmentProgress(user._id as mongoose.Types.ObjectId, courseId, lessonId);
     }
 
     return NextResponse.json({ progress });

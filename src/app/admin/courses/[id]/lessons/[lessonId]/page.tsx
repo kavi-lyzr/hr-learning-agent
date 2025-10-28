@@ -791,7 +791,7 @@ export default function LessonEditorPage() {
                       id="enable-quiz"
                       checked={formData.hasQuiz}
                       onCheckedChange={(checked) => {
-                        if (!checked && formData.quizData?.questions.length > 0) {
+                        if (!checked && formData.quizData?.questions && formData.quizData.questions.length > 0) {
                           if (!confirm('This will remove the quiz. Are you sure?')) {
                             return;
                           }

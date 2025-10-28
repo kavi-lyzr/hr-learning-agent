@@ -160,7 +160,8 @@ export async function buildTutorSystemPrompt(
                 for (const lesson of module.lessons) {
                   prompt += `   - ${lesson.title}`;
                   if (lesson.contentType === 'video') {
-                    prompt += ` (Video, ${Math.round((lesson.contentData?.videoDuration || 0) / 60)} min)`;
+                    const duration = (lesson as any).duration || 0;
+                    prompt += ` (Video, ${duration} min)`;
                   } else {
                     prompt += ` (Article)`;
                   }

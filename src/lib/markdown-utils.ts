@@ -40,7 +40,7 @@ export function markdownToHtml(markdown: string): string {
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
   // Code blocks
-  html = html.replace(/```([^`]+)```/gs, '<pre><code>$1</code></pre>');
+  html = html.replace(/```([\s\S]+?)```/g, '<pre><code>$1</code></pre>');
 
   // Unordered lists (must process multi-line)
   html = html.replace(/^\* (.+)$/gim, '<li>$1</li>');
@@ -50,7 +50,7 @@ export function markdownToHtml(markdown: string): string {
   html = html.replace(/^\d+\. (.+)$/gim, '<li>$1</li>');
 
   // Wrap consecutive list items in ul/ol tags
-  html = html.replace(/(<li>.*<\/li>\n?)+/gs, (match) => {
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
     // Check if it's an ordered or unordered list based on the original markdown
     // For simplicity, we'll wrap in <ul> by default
     return `<ul>${match}</ul>`;
@@ -109,7 +109,7 @@ export function markdownToPlainText(markdown: string): string {
   text = text.replace(/`([^`]+)`/g, '$1');
 
   // Remove code blocks
-  text = text.replace(/```[^`]*```/gs, '');
+  text = text.replace(/```[\s\S]*?```/g, '');
 
   // Remove list markers
   text = text.replace(/^\* /gim, '');

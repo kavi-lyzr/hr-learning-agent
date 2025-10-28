@@ -105,19 +105,22 @@ export async function POST(request: Request) {
     // Decrypt the user's API key to create agents
     const ownerApiKey = decrypt(user.lyzrApiKey);
 
-    // Create Lyzr agents for this organization (uses owner's API key)
-    console.log(`Creating Lyzr agents for organization: ${name}`);
-    const agents = await createAgentsForOrganization(ownerApiKey, name);
-
-    // Create organization with agents
+    // Create organization first to get its ID
     const organization = new Organization({
       name,
       slug,
       ownerId: user._id, // Use MongoDB _id, not lyzrId
-      tutorAgent: agents.tutorAgent,
-      quizGeneratorAgent: agents.quizGeneratorAgent,
-      contentGeneratorAgent: agents.contentGeneratorAgent,
     });
+    await organization.save();
+
+    // Create Lyzr agents for this organization (uses owner's API key)
+    console.log(`Creating Lyzr agents for organization: ${name}`);
+    const agents = await createAgentsForOrganization(ownerApiKey, (organization._id as any).toString(), name);
+
+    // Update organization with agents
+    organization.tutorAgent = agents.tutorAgent;
+    organization.quizGeneratorAgent = agents.quizGeneratorAgent;
+    organization.contentGeneratorAgent = agents.contentGeneratorAgent;
     await organization.save();
     console.log(`Organization created with agents: ${organization._id}`);
 
