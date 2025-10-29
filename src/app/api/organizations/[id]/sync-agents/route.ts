@@ -15,12 +15,13 @@ import { ensureOrganizationAgentsUpToDate } from '@/lib/lyzr-services';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await dbConnect();
 
   try {
-    const organizationId = params.id;
+    const { id } = await params;
+    const organizationId = id;
 
     // Get organization
     const organization = await Organization.findById(organizationId);

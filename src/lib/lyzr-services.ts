@@ -372,7 +372,7 @@ export async function createAgentsForOrganization(
     organizationId: string,
     organizationName: string
 ): Promise<{
-    tutorAgent: { agentId: string; version: string; toolIds: string[] };
+    tutorAgent: { agentId: string; version: string; toolIds: string[]; toolVersion: string };
     quizGeneratorAgent: { agentId: string; version: string };
     contentGeneratorAgent: { agentId: string; version: string };
 }> {
