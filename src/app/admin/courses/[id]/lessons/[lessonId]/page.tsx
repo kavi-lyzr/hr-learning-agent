@@ -138,13 +138,36 @@ export default function LessonEditorPage() {
       if (lesson) {
         // Convert S3 URLs to presigned URLs for editing
         let articleContent = lesson.content.articleContent || null;
+
+        // Handle different article content formats
         if (articleContent) {
-          try {
-            articleContent = await convertToSignedUrls(articleContent);
-          } catch (error) {
-            console.error('Error converting S3 URLs to presigned URLs:', error);
-            // Continue with original content if conversion fails
+          // If articleContent is a string (HTML), use the HTML instead
+          if (typeof articleContent === 'string') {
+            console.log('⚠️  articleContent is a string, will use HTML fallback');
+            articleContent = null; // TipTap will use HTML if JSON is null
           }
+          // If it's an object with numeric keys (corrupted), use HTML fallback
+          else if (typeof articleContent === 'object' && articleContent !== null) {
+            // Check if it's a valid TipTap JSON structure
+            if (!articleContent.type || !articleContent.content) {
+              console.error('⚠️  Invalid articleContent structure, will use HTML fallback');
+              articleContent = null;
+            } else {
+              // Valid JSON, convert S3 URLs
+              try {
+                articleContent = await convertToSignedUrls(articleContent);
+              } catch (error) {
+                console.error('Error converting S3 URLs to presigned URLs:', error);
+                // Continue with original content if conversion fails
+              }
+            }
+          }
+        }
+
+        // If articleContent is null but we have HTML, use HTML as initial content
+        if (!articleContent && lesson.content.articleHtml) {
+          console.log('📝 Using articleHtml as initial content');
+          articleContent = lesson.content.articleHtml;
         }
 
         setFormData({
@@ -239,17 +262,21 @@ export default function LessonEditorPage() {
       const { markdownToHtml } = await import('@/lib/markdown-utils');
       const htmlContent = markdownToHtml(data.content);
 
-      // Convert HTML back to a format RTE can understand (it will process and convert to JSON)
-      setFormData({
-        ...formData,
+      // Set HTML content and wait for RTE to convert it to JSON
+      // We pass HTML as initialContent, RTE will call onChange with JSON
+      setFormData(prev => ({
+        ...prev,
         articleHtml: htmlContent,
-        articleContent: htmlContent, // Pass HTML, RTE will convert to JSON
-      });
+        articleContent: null, // Clear articleContent, force RTE to use HTML
+      }));
 
       setHasChanges(true);
       setContentPromptOpen(false);
       setContentPrompt('');
-      setRteKey(prev => prev + 1); // Force RTE to re-render with new content
+
+      // Force RTE to re-render with new HTML content
+      setRteKey(prev => prev + 1);
+
       toast.success(isRefining ? 'Content refined successfully!' : 'Content generated successfully!');
     } catch (error: any) {
       console.error('Error generating content:', error);
@@ -756,7 +783,7 @@ export default function LessonEditorPage() {
                 <CardContent>
                   <RTE
                     key={rteKey}
-                    initialContent={formData.articleContent}
+                    initialContent={formData.articleContent || formData.articleHtml}
                     showSubmitButton={false}
                     onChange={(data) => {
                       setFormData({

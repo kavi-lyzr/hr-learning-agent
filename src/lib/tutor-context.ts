@@ -8,7 +8,6 @@
 import User from '@/models/user';
 import Enrollment from '@/models/enrollment';
 import Course from '@/models/course';
-import Lesson from '@/models/lesson';
 import mongoose from 'mongoose';
 
 /**
@@ -179,54 +178,84 @@ export async function buildTutorSystemPrompt(
       break;
 
     case 'lesson-view':
-      if (lessonId && mongoose.Types.ObjectId.isValid(lessonId)) {
-        const lesson = await Lesson.findById(lessonId)
-          .populate('courseId', 'title')
-          .populate('moduleId', 'title')
-          .lean();
+      console.log(`🔍 Lesson view detected. courseId: ${courseId}, lessonId: ${lessonId}`);
 
-        if (lesson) {
-          prompt += `${userName} is currently viewing a lesson:\n\n`;
-          prompt += `- **Course**: ${(lesson.courseId as any)?.title || 'Unknown'}\n`;
-          prompt += `- **Module**: ${(lesson.moduleId as any)?.title || 'Unknown'}\n`;
-          prompt += `- **Lesson**: ${lesson.title}\n`;
-          prompt += `- **Type**: ${lesson.contentType === 'video' ? 'Video' : 'Article'}\n`;
+      if (lessonId && courseId && mongoose.Types.ObjectId.isValid(courseId)) {
+        // Lessons are embedded in courses, not separate documents
+        const course = await Course.findById(courseId).lean();
 
-          if (lesson.description) {
-            prompt += `- **Description**: ${lesson.description}\n`;
-          }
+        if (course) {
+          // Find the lesson in the course modules
+          let lesson: any = null;
+          let moduleName = 'Unknown';
 
-          // Include lesson content for immediate context
-          prompt += `\n**Current Lesson Content**:\n\n`;
-
-          if (lesson.contentType === 'article' && lesson.contentData?.articleHtml) {
-            const articleText = sanitizeHtml(lesson.contentData.articleHtml);
-            // Limit to 5000 characters to avoid context overflow
-            const truncatedText = articleText.length > 5000
-              ? articleText.substring(0, 5000) + '...\n\n[Content truncated. Use get_module_content tool with Module ID: ' + (lesson.moduleId as any)?._id + ' for full content]'
-              : articleText;
-            prompt += truncatedText + '\n\n';
-          }
-
-          if (lesson.contentType === 'video') {
-            prompt += `Video URL: ${lesson.contentData?.videoUrl || 'N/A'}\n`;
-            prompt += `Duration: ${Math.round((lesson.contentData?.videoDuration || 0) / 60)} minutes\n\n`;
-
-            if (lesson.contentData?.transcript) {
-              const transcript = lesson.contentData.transcript;
-              // Limit transcript to 5000 characters
-              const truncatedTranscript = transcript.length > 5000
-                ? transcript.substring(0, 5000) + '...\n\n[Transcript truncated. Use get_module_content tool with Module ID: ' + (lesson.moduleId as any)?._id + ' for full transcript]'
-                : transcript;
-              prompt += `**Video Transcript**:\n${truncatedTranscript}\n\n`;
+          for (const module of course.modules) {
+            const foundLesson = module.lessons.find((l: any) => String(l._id) === String(lessonId));
+            if (foundLesson) {
+              lesson = foundLesson;
+              moduleName = module.title;
+              break;
             }
           }
 
-          if (lesson.hasQuiz) {
-            const numQuestions = lesson.quizData?.questions?.length || 0;
-            prompt += `\n**Assessment**: This lesson includes a quiz with ${numQuestions} question(s).\n`;
+          if (lesson) {
+            console.log(`✅ Found lesson: "${lesson.title}" in module "${moduleName}"`);
+            prompt += `${userName} is currently viewing a lesson:\n\n`;
+            prompt += `- **Course**: ${course.title}\n`;
+            prompt += `- **Module**: ${moduleName}\n`;
+            prompt += `- **Lesson**: ${lesson.title}\n`;
+            prompt += `- **Type**: ${lesson.contentType === 'video' ? 'Video' : lesson.contentType === 'article' ? 'Article' : 'Video + Article'}\n`;
+
+            if (lesson.description) {
+              prompt += `- **Description**: ${lesson.description}\n`;
+            }
+
+            // Include lesson content for immediate context
+            prompt += `\n**Current Lesson Content**:\n\n`;
+
+            if ((lesson.contentType === 'article' || lesson.contentType === 'video-article') && lesson.content?.articleHtml) {
+              const articleText = sanitizeHtml(lesson.content.articleHtml);
+              // Limit to 5000 characters to avoid context overflow
+              const truncatedText = articleText.length > 5000
+                ? articleText.substring(0, 5000) + '...\n\n[Content truncated for length]'
+                : articleText;
+              prompt += truncatedText + '\n\n';
+              console.log(`📄 Included article content (${articleText.length} chars, truncated to ${truncatedText.length})`);
+            }
+
+            if ((lesson.contentType === 'video' || lesson.contentType === 'video-article') && lesson.content) {
+              if (lesson.content.videoUrl) {
+                prompt += `**Video URL**: ${lesson.content.videoUrl}\n`;
+                prompt += `**Duration**: ${lesson.duration || 0} minutes\n\n`;
+              }
+
+              if (lesson.content.transcript && Array.isArray(lesson.content.transcript)) {
+                // Transcript is an array of {text, start, duration}
+                const transcriptText = lesson.content.transcript.map((t: any) => t.text).join(' ');
+                // Limit transcript to 5000 characters
+                const truncatedTranscript = transcriptText.length > 5000
+                  ? transcriptText.substring(0, 5000) + '...\n\n[Transcript truncated for length]'
+                  : transcriptText;
+                prompt += `**Video Transcript**:\n${truncatedTranscript}\n\n`;
+                console.log(`🎥 Included transcript (${transcriptText.length} chars, truncated to ${truncatedTranscript.length})`);
+              }
+            }
+
+            if (lesson.hasQuiz) {
+              const numQuestions = lesson.quizData?.questions?.length || 0;
+              prompt += `\n**Assessment**: This lesson includes a quiz with ${numQuestions} question(s).\n`;
+            }
+          } else {
+            console.warn(`⚠️  Lesson not found in course modules. lessonId: ${lessonId}`);
+            prompt += `${userName} is viewing a lesson, but the content could not be loaded.\n`;
           }
+        } else {
+          console.warn(`⚠️  Course not found for ID: ${courseId}`);
+          prompt += `${userName} is viewing a lesson, but the course could not be loaded.\n`;
         }
+      } else {
+        console.warn(`⚠️  Invalid or missing courseId/lessonId. courseId: ${courseId}, lessonId: ${lessonId}`);
+        prompt += `${userName} is on a lesson page.\n`;
       }
       break;
 

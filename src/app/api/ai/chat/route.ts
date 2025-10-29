@@ -102,6 +102,12 @@ export async function POST(request: NextRequest) {
       lessonId: context?.lessonId,
     };
 
+    console.log('📥 Chat request context:', JSON.stringify({
+      currentPage: contextOptions.currentPage,
+      courseId: contextOptions.courseId,
+      lessonId: contextOptions.lessonId,
+    }, null, 2));
+
     // Build dynamic system prompt
     console.log('🧠 Building tutor context...');
     const tutorPrompt = await buildTutorSystemPrompt(contextOptions);

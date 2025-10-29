@@ -10,6 +10,7 @@ export interface IOrganization extends Document {
     agentId: string;
     version: string;
     toolIds?: string[]; // Tool IDs for custom tools
+    toolVersion?: string; // Version of tools (for recreation when app URL changes)
   };
   quizGeneratorAgent?: {
     agentId: string;
@@ -40,6 +41,7 @@ const OrganizationSchema = new Schema<IOrganization>({
     agentId: { type: String },
     version: { type: String },
     toolIds: [{ type: String }], // Tool IDs for custom tools
+    toolVersion: { type: String }, // Version of tools (for recreation)
   },
   quizGeneratorAgent: {
     agentId: { type: String },

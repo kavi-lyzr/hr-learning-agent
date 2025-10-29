@@ -8,11 +8,13 @@
  */
 
 import User, { IUser } from '@/models/user';
+import Organization from '@/models/organization';
 import { encrypt, decrypt } from '@/lib/encryption';
 import {
     LATEST_TUTOR_AGENT_VERSION,
     LATEST_QUIZ_GENERATOR_AGENT_VERSION,
     LATEST_CONTENT_GENERATOR_AGENT_VERSION,
+    LATEST_TOOL_VERSION,
     TUTOR_AGENT_CONFIG,
     QUIZ_GENERATOR_AGENT_CONFIG,
     CONTENT_GENERATOR_AGENT_CONFIG,
@@ -395,6 +397,7 @@ export async function createAgentsForOrganization(
             agentId: tutorAgentId,
             version: LATEST_TUTOR_AGENT_VERSION,
             toolIds,
+            toolVersion: LATEST_TOOL_VERSION,
         },
         quizGeneratorAgent: {
             agentId: quizGeneratorAgentId,
@@ -506,4 +509,100 @@ export async function chatWithLyzrAgent(
         response: data.response,
         session_id: data.session_id || finalSessionId,
     };
+}
+
+// --- Agent & Tool Versioning ---
+
+/**
+ * Ensure organization's tools and agents are up to date
+ * Recreates tools if version mismatch and updates agents
+ * Call this on login or when accessing organization
+ */
+export async function ensureOrganizationAgentsUpToDate(
+    ownerApiKey: string,
+    organizationId: string
+): Promise<void> {
+    const organization = await Organization.findById(organizationId);
+    if (!organization) {
+        throw new Error('Organization not found');
+    }
+
+    let toolsNeedUpdate = false;
+    let newToolIds: string[] = [];
+
+    // Check if tools need to be recreated
+    if (
+        !organization.tutorAgent?.toolIds ||
+        organization.tutorAgent.toolIds.length === 0 ||
+        !organization.tutorAgent.toolVersion ||
+        organization.tutorAgent.toolVersion !== LATEST_TOOL_VERSION
+    ) {
+        console.log(`Tool version mismatch for organization ${organization.name}. Expected v${LATEST_TOOL_VERSION}, found v${organization.tutorAgent?.toolVersion || 'none'}. Recreating tools...`);
+        toolsNeedUpdate = true;
+
+        // Create new tools with updated URL
+        newToolIds = await createTutorTools(ownerApiKey, organizationId, organization.name);
+        console.log(`✅ Successfully recreated ${newToolIds.length} tools for ${organization.name}`);
+
+        // Update organization with new tool IDs and version
+        organization.tutorAgent = organization.tutorAgent || { agentId: '', version: '' };
+        organization.tutorAgent.toolIds = newToolIds;
+        organization.tutorAgent.toolVersion = LATEST_TOOL_VERSION;
+    } else {
+        console.log(`Tools are up to date for organization ${organization.name} (v${organization.tutorAgent.toolVersion})`);
+        newToolIds = organization.tutorAgent.toolIds;
+    }
+
+    // Check and update tutor agent if needed
+    if (
+        toolsNeedUpdate ||
+        !organization.tutorAgent?.version ||
+        organization.tutorAgent.version !== LATEST_TUTOR_AGENT_VERSION
+    ) {
+        if (organization.tutorAgent?.agentId) {
+            console.log(`Updating tutor agent for ${organization.name}...`);
+            // Create updated agent config with new tools
+            const updatedConfig = {
+                ...TUTOR_AGENT_CONFIG,
+                tools: newToolIds,
+                tool_configs: newToolIds.map(toolId => ({
+                    tool_name: toolId,
+                    tool_source: "openapi",
+                    action_names: [getToolDescription(toolId)],
+                    persist_auth: false
+                })),
+            };
+            await updateLyzrAgent(ownerApiKey, organization.tutorAgent.agentId, updatedConfig);
+            organization.tutorAgent.version = LATEST_TUTOR_AGENT_VERSION;
+            console.log(`✅ Updated tutor agent for ${organization.name}`);
+        }
+    }
+
+    // Check and update quiz generator agent if needed
+    if (
+        organization.quizGeneratorAgent?.agentId &&
+        (!organization.quizGeneratorAgent.version ||
+            organization.quizGeneratorAgent.version !== LATEST_QUIZ_GENERATOR_AGENT_VERSION)
+    ) {
+        console.log(`Updating quiz generator agent for ${organization.name}...`);
+        await updateLyzrAgent(ownerApiKey, organization.quizGeneratorAgent.agentId, QUIZ_GENERATOR_AGENT_CONFIG);
+        organization.quizGeneratorAgent.version = LATEST_QUIZ_GENERATOR_AGENT_VERSION;
+        console.log(`✅ Updated quiz generator agent for ${organization.name}`);
+    }
+
+    // Check and update content generator agent if needed
+    if (
+        organization.contentGeneratorAgent?.agentId &&
+        (!organization.contentGeneratorAgent.version ||
+            organization.contentGeneratorAgent.version !== LATEST_CONTENT_GENERATOR_AGENT_VERSION)
+    ) {
+        console.log(`Updating content generator agent for ${organization.name}...`);
+        await updateLyzrAgent(ownerApiKey, organization.contentGeneratorAgent.agentId, CONTENT_GENERATOR_AGENT_CONFIG);
+        organization.contentGeneratorAgent.version = LATEST_CONTENT_GENERATOR_AGENT_VERSION;
+        console.log(`✅ Updated content generator agent for ${organization.name}`);
+    }
+
+    // Save organization if any changes were made
+    await organization.save();
+    console.log(`✅ All agents and tools are up to date for ${organization.name}`);
 }

@@ -144,9 +144,24 @@ Generate the quiz questions in the required JSON format.`;
       );
     }
 
-    // Validate each question
+    // Normalize and validate each question
     for (let i = 0; i < quizData.questions.length; i++) {
       const q = quizData.questions[i];
+
+      // Handle both correctAnswer and correctAnswerIndex (AI sometimes uses wrong field name)
+      if (q.correctAnswer !== undefined && q.correctAnswerIndex === undefined) {
+        console.log(`⚠️  Normalizing question ${i}: correcting 'correctAnswer' to 'correctAnswerIndex'`);
+        q.correctAnswerIndex = q.correctAnswer;
+        delete q.correctAnswer;
+      }
+
+      // Handle both question and questionText (AI sometimes uses 'question' instead of 'questionText')
+      if (q.question !== undefined && q.questionText === undefined) {
+        console.log(`⚠️  Normalizing question ${i}: correcting 'question' to 'questionText'`);
+        q.questionText = q.question;
+        delete q.question;
+      }
+
       if (
         !q.questionText ||
         !Array.isArray(q.options) ||

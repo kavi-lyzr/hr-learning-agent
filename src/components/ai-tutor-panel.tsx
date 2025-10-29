@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { usePathname, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
-import { Bot, Send, User, Minimize2, Maximize2 } from "lucide-react";
+import { Bot, Send, User, Minimize2, Maximize2, BookOpen, GraduationCap } from "lucide-react";
 
 interface Message {
   id: string;
@@ -19,6 +21,8 @@ interface Message {
 export function AiTutorPanel() {
   const { currentOrganization } = useOrganization();
   const { userId } = useAuth();
+  const pathname = usePathname();
+  const params = useParams();
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -31,6 +35,97 @@ export function AiTutorPanel() {
   const [input, setInput] = useState("");
   const [isMinimized, setIsMinimized] = useState(false);
   const [isSending, setIsSending] = useState(false);
+
+  // Context state
+  const [currentContext, setCurrentContext] = useState<{
+    page: 'dashboard' | 'course-view' | 'lesson-view' | 'ai-assistant';
+    courseId?: string;
+    lessonId?: string;
+    courseName?: string;
+    lessonName?: string;
+  }>({
+    page: 'dashboard',
+  });
+
+  // Detect current page context
+  useEffect(() => {
+    const detectContext = async () => {
+      // Lesson view: /employee/courses/[id]/lessons/[lessonId]
+      if (pathname?.includes('/lessons/') && params?.lessonId) {
+        const courseId = params.id as string;
+        const lessonId = params.lessonId as string;
+
+        try {
+          // Fetch lesson and course details for display
+          const courseResponse = await fetch(`/api/courses/${courseId}`);
+          if (courseResponse.ok) {
+            const courseData = await courseResponse.json();
+            let lessonName = 'Current Lesson';
+
+            // Find lesson in course modules
+            for (const module of courseData.course.modules || []) {
+              const lesson = module.lessons?.find((l: any) => l._id === lessonId);
+              if (lesson) {
+                lessonName = lesson.title;
+                break;
+              }
+            }
+
+            setCurrentContext({
+              page: 'lesson-view',
+              courseId,
+              lessonId,
+              courseName: courseData.course.title,
+              lessonName,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching context:', error);
+          setCurrentContext({
+            page: 'lesson-view',
+            courseId,
+            lessonId,
+          });
+        }
+      }
+      // Course view: /employee/courses/[id]
+      else if (pathname?.includes('/courses/') && params?.id && !pathname?.includes('/lessons/')) {
+        const courseId = params.id as string;
+
+        try {
+          const courseResponse = await fetch(`/api/courses/${courseId}`);
+          if (courseResponse.ok) {
+            const courseData = await courseResponse.json();
+            setCurrentContext({
+              page: 'course-view',
+              courseId,
+              courseName: courseData.course.title,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching context:', error);
+          setCurrentContext({
+            page: 'course-view',
+            courseId,
+          });
+        }
+      }
+      // AI assistant page
+      else if (pathname?.includes('/ai-assistant')) {
+        setCurrentContext({
+          page: 'ai-assistant',
+        });
+      }
+      // Dashboard or other pages
+      else {
+        setCurrentContext({
+          page: 'dashboard',
+        });
+      }
+    };
+
+    detectContext();
+  }, [pathname, params]);
 
   const handleSend = async () => {
     if (!input.trim() || isSending) return;
@@ -52,6 +147,14 @@ export function AiTutorPanel() {
         throw new Error('Please select an organization and sign in');
       }
 
+      console.log('🤖 Sending AI chat request with context:', {
+        page: currentContext.page,
+        courseId: currentContext.courseId,
+        lessonId: currentContext.lessonId,
+        courseName: currentContext.courseName,
+        lessonName: currentContext.lessonName,
+      });
+
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,7 +163,9 @@ export function AiTutorPanel() {
           organizationId: currentOrganization.id,
           userId: userId,
           context: {
-            currentPage: 'dashboard',
+            currentPage: currentContext.page,
+            courseId: currentContext.courseId,
+            lessonId: currentContext.lessonId,
           },
         }),
       });
@@ -110,24 +215,40 @@ export function AiTutorPanel() {
   return (
     <Card className="h-full flex flex-col shadow-lg border-l">
       {/* Header */}
-      <div className="border-b p-4 flex items-center justify-between bg-muted/30">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <Bot className="h-4 w-4 text-primary" />
+      <div className="border-b p-4 bg-muted/30">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+              <Bot className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">AI Learning Assistant</h3>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-sm">AI Learning Assistant</h3>
-            <p className="text-xs text-muted-foreground">Always here to help</p>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setIsMinimized(true)}
+          >
+            <Minimize2 className="h-4 w-4" />
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => setIsMinimized(true)}
-        >
-          <Minimize2 className="h-4 w-4" />
-        </Button>
+
+        {/* Context Indicator */}
+        {currentContext.page === 'lesson-view' && currentContext.lessonName ? (
+          <Badge variant="secondary" className="text-xs gap-1 max-w-full">
+            <BookOpen className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">@ {currentContext.lessonName}</span>
+          </Badge>
+        ) : currentContext.page === 'course-view' && currentContext.courseName ? (
+          <Badge variant="secondary" className="text-xs gap-1 max-w-full">
+            <GraduationCap className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">@ {currentContext.courseName}</span>
+          </Badge>
+        ) : (
+          <p className="text-xs text-muted-foreground">Always here to help</p>
+        )}
       </div>
 
       {/* Messages */}

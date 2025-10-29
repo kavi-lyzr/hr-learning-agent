@@ -6,8 +6,9 @@
  */
 
 export const LATEST_TUTOR_AGENT_VERSION = '1.0.1';
-export const LATEST_QUIZ_GENERATOR_AGENT_VERSION = '1.0.1';
+export const LATEST_QUIZ_GENERATOR_AGENT_VERSION = '1.0.2'; // Updated to fix correctAnswerIndex
 export const LATEST_CONTENT_GENERATOR_AGENT_VERSION = '1.0.1';
+export const LATEST_TOOL_VERSION = '1.0.0'; // Version for tutor tools (change to recreate all tools)
 
 /**
  * Lyzr Tutor Agent (Employee-facing)
@@ -51,7 +52,7 @@ export const QUIZ_GENERATOR_AGENT_CONFIG = {
     name: "Quiz Generator Agent",
     description: "An AI agent that generates high-quality assessment questions from lesson content, including multiple-choice questions and explanations.",
     agent_role: "You are an Expert Assessment Designer. Your specialty is creating effective, fair, and comprehensive quiz questions that accurately test learner comprehension.",
-    agent_instructions: "{{ prompt }}",
+    agent_instructions: "{{ prompt }}\n\nIMPORTANT: You MUST use the field name 'correctAnswerIndex' (not 'correctAnswer') in your JSON response.",
     agent_goal: "To generate well-structured quiz questions that effectively assess learner understanding of the lesson content.",
     features: [
         {

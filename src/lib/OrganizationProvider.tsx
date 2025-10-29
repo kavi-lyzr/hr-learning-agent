@@ -41,6 +41,14 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     setCurrentOrganizationState(org);
     // Store in cookie with 30-day expiration
     Cookies.set('current_organization', JSON.stringify(org), { expires: 30 });
+
+    // Ensure agents are up to date in the background (don't block UI)
+    fetch(`/api/organizations/${org.id}/ensure-agents`, {
+      method: 'POST',
+    }).catch(error => {
+      console.error('Failed to ensure agents are up to date:', error);
+      // Don't show error to user - this is a background task
+    });
   }, []);
 
   const refreshOrganizations = useCallback(async () => {
@@ -65,6 +73,14 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
             const orgExists = orgs.find(o => o.id === savedOrg.id);
             if (orgExists) {
               setCurrentOrganizationState(savedOrg);
+
+              // Ensure agents are up to date in the background
+              fetch(`/api/organizations/${savedOrg.id}/ensure-agents`, {
+                method: 'POST',
+              }).catch(error => {
+                console.error('Failed to ensure agents are up to date:', error);
+              });
+
               setIsLoading(false);
               return;
             }
