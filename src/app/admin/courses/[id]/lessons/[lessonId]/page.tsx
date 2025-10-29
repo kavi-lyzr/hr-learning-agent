@@ -80,6 +80,7 @@ export default function LessonEditorPage() {
   const [contentPromptOpen, setContentPromptOpen] = useState(false);
   const [contentPrompt, setContentPrompt] = useState('');
   const [isRefining, setIsRefining] = useState(false);
+  const [rteKey, setRteKey] = useState(0); // Key to force RTE re-render
 
   const [formData, setFormData] = useState<LessonFormData>({
     title: '',
@@ -212,7 +213,7 @@ export default function LessonEditorPage() {
     try {
       setGeneratingContent(true);
       const organizationId = course.organizationId;
-      const userId = 'system'; // TODO: Get from auth context
+      const userId = 'admin'; // Admin user generating content
 
       const response = await fetch('/api/ai/generate-article', {
         method: 'POST',
@@ -238,16 +239,17 @@ export default function LessonEditorPage() {
       const { markdownToHtml } = await import('@/lib/markdown-utils');
       const htmlContent = markdownToHtml(data.content);
 
-      // If refining, replace existing content; if generating, set new content
+      // Convert HTML back to a format RTE can understand (it will process and convert to JSON)
       setFormData({
         ...formData,
         articleHtml: htmlContent,
-        articleContent: null, // Will be set when RTE processes it
+        articleContent: htmlContent, // Pass HTML, RTE will convert to JSON
       });
 
       setHasChanges(true);
       setContentPromptOpen(false);
       setContentPrompt('');
+      setRteKey(prev => prev + 1); // Force RTE to re-render with new content
       toast.success(isRefining ? 'Content refined successfully!' : 'Content generated successfully!');
     } catch (error: any) {
       console.error('Error generating content:', error);
@@ -269,7 +271,7 @@ export default function LessonEditorPage() {
       setGeneratingQuiz(true);
 
       const organizationId = course.organizationId;
-      const userId = 'system'; // TODO: Get from auth context
+      const userId = 'admin'; // Admin user generating quiz
 
       const transcriptText = formData.transcript.map((t: any) => t.text).join(' ');
 
@@ -753,6 +755,7 @@ export default function LessonEditorPage() {
                 </CardHeader>
                 <CardContent>
                   <RTE
+                    key={rteKey}
                     initialContent={formData.articleContent}
                     showSubmitButton={false}
                     onChange={(data) => {

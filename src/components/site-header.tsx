@@ -23,21 +23,15 @@ import { Label } from "@/components/ui/label";
 import { LogOut, ChevronDown, Moon, Sun, Eye } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/AuthProvider";
+import { useOrganization } from "@/lib/OrganizationProvider";
 import { useEffect, useState } from "react";
 
-interface Organization {
-  id: string;
-  name: string;
-  iconUrl?: string;
-  role: 'admin' | 'employee';
-}
-
 interface SiteHeaderProps {
-  organization?: Organization;
   breadcrumbs?: Array<{ label: string; href?: string }>;
 }
 
-export function SiteHeader({ organization, breadcrumbs }: SiteHeaderProps) {
+export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
+  const { currentOrganization: organization } = useOrganization();
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();

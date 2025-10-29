@@ -49,7 +49,7 @@ export default function AdminLayout({
           }}
         />
         <div className="flex-1 flex flex-col w-full">
-          <SiteHeader organization={currentOrganization} />
+          <SiteHeader />
           {children}
         </div>
       </div>

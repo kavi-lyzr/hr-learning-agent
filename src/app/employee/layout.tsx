@@ -53,7 +53,7 @@ export default function EmployeeLayout({
         <div className="flex-1 flex w-full">
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0 w-full">
-            <SiteHeader organization={currentOrganization} />
+            <SiteHeader />
             {children}
           </div>
 

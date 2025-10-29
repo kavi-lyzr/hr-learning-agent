@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
+import { useOrganization } from "@/lib/OrganizationProvider";
+import { useAuth } from "@/lib/AuthProvider";
 import { Bot, Send, User, Minimize2, Maximize2 } from "lucide-react";
 
 interface Message {
@@ -15,6 +17,9 @@ interface Message {
 }
 
 export function AiTutorPanel() {
+  const { currentOrganization } = useOrganization();
+  const { userId } = useAuth();
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -43,17 +48,17 @@ export function AiTutorPanel() {
     setIsSending(true);
 
     try {
-      // TODO: Get organizationId and userId from context/auth
-      const organizationId = 'temp-org-id';
-      const userId = 'temp-user-id';
+      if (!currentOrganization || !userId) {
+        throw new Error('Please select an organization and sign in');
+      }
 
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: messageContent,
-          organizationId,
-          userId,
+          organizationId: currentOrganization.id,
+          userId: userId,
           context: {
             currentPage: 'dashboard',
           },
@@ -126,8 +131,8 @@ export function AiTutorPanel() {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
+      <ScrollArea className="flex-1 p-4 overflow-y-auto">
+        <div className="space-y-4 pb-4">
           {messages.map((message) => (
             <div
               key={message.id}

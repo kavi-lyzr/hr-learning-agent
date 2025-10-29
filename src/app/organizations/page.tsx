@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Plus, Building, Loader2, LogOut, ChevronDown, GraduationCap } from "lucide-react";
 import { useAuth } from "@/lib/AuthProvider";
+import { useOrganization } from "@/lib/OrganizationProvider";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -19,6 +20,7 @@ interface Organization {
   id: string;
   name: string;
   slug: string;
+  iconUrl?: string;
   role: 'admin' | 'employee';
   status: 'active' | 'invited' | 'inactive';
   joinedAt?: Date;
@@ -26,6 +28,7 @@ interface Organization {
 
 export default function OrganizationsPage() {
   const { isAuthenticated, isLoading, userId, email, displayName, logout } = useAuth();
+  const { setCurrentOrganization } = useOrganization();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loadingOrgs, setLoadingOrgs] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -124,11 +127,20 @@ export default function OrganizationsPage() {
   };
 
   const handleOrganizationSelect = (org: Organization) => {
+    // Set the organization in context (this updates state + cookie)
+    setCurrentOrganization({
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      iconUrl: org.iconUrl,
+      role: org.role,
+    });
+
     // Navigate to appropriate dashboard based on role
     if (org.role === 'admin') {
-      router.push(`/admin/dashboard?org=${org.id}`);
+      router.push('/admin/dashboard');
     } else {
-      router.push(`/employee/dashboard?org=${org.id}`);
+      router.push('/employee/dashboard');
     }
   };
 

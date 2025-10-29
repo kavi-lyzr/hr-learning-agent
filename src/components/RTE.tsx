@@ -139,8 +139,7 @@ const createExtensions = (onImageUploadStart: () => void, onImageUploadEnd: () =
 ];
 
 const defaultContent = `
-<h2 class="tiptap-heading">Shot taken in Kashmir 📸</h2>
-<p>Try interacting with the image below or add your own!</p>
+<p>Start writing your lesson content here...</p>
 `;
 
 const StarterKitExample = ({ 

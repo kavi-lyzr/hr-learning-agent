@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useOrganization } from "@/lib/OrganizationProvider";
+import { useAuth } from "@/lib/AuthProvider";
 import { Bot, Send, User, Sparkles } from "lucide-react";
 
 interface Message {
@@ -14,6 +16,8 @@ interface Message {
 
 export default function EmployeeAIAssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { currentOrganization } = useOrganization();
+  const { userId } = useAuth();
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -46,17 +50,17 @@ export default function EmployeeAIAssistantPage() {
     setIsSending(true);
 
     try {
-      // TODO: Get organizationId and userId from context/auth
-      const organizationId = 'temp-org-id';
-      const userId = 'temp-user-id';
+      if (!currentOrganization || !userId) {
+        throw new Error('Please select an organization and sign in');
+      }
 
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: messageContent,
-          organizationId,
-          userId,
+          organizationId: currentOrganization.id,
+          userId: userId,
           context: {
             currentPage: 'ai-assistant',
           },
