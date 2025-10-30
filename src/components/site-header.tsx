@@ -10,6 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -25,6 +28,7 @@ import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/AuthProvider";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface SiteHeaderProps {
   breadcrumbs?: Array<{ label: string; href?: string }>;
@@ -35,15 +39,56 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { email, displayName, logout } = useAuth();
+  const { email, displayName, logout, userId } = useAuth();
   const [isAdminView, setIsAdminView] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [isRequestOpen, setIsRequestOpen] = useState(false);
+  const [requestEmail, setRequestEmail] = useState<string>("");
+  const [requestMessage, setRequestMessage] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const GITHUB_URL = "https://github.com/kavi-lyzr/hr-learning-agent";
+  const APP_SLUG = "hr-learning-agent";
 
   // Determine if current view is admin or employee based on pathname
   useEffect(() => {
     setMounted(true);
     setIsAdminView(pathname.startsWith('/admin'));
   }, [pathname]);
+
+  useEffect(() => {
+    if (email) setRequestEmail(email);
+  }, [email]);
+
+  const submitFeatureRequest = async () => {
+    if (!requestEmail || !requestMessage) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/feature-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: requestEmail,
+          message: requestMessage,
+          app: APP_SLUG,
+          pagePath: typeof window !== 'undefined' ? window.location.pathname : undefined,
+          userId: userId || undefined,
+        }),
+      });
+      if (res.ok) {
+        setIsRequestOpen(false);
+        setRequestMessage("");
+        toast.success('Thanks! Your request has been submitted.');
+      } else {
+        toast.error('Something went wrong submitting your request.');
+      }
+    } catch (e) {
+      console.error('Failed to submit feature request', e);
+      toast.error('Failed to submit feature request.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -124,6 +169,66 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
+          {/* Request Feature */}
+          <Dialog open={isRequestOpen} onOpenChange={setIsRequestOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                Request Feature
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Request a feature</DialogTitle>
+                <DialogDescription>
+                  Share what you'd like to see improved, or schedule a <a href="https://www.lyzr.ai/book-demo/" target="_blank" rel="noreferrer" className="text-primary hover:text-primary/80">call</a>
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-4 py-2">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={requestEmail}
+                    onChange={(e) => setRequestEmail(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Your request</label>
+                  <Textarea
+                    placeholder="Describe the feature or feedback..."
+                    value={requestMessage}
+                    onChange={(e) => setRequestMessage(e.target.value)}
+                    className="min-h-28"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setIsRequestOpen(false)} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button onClick={submitFeatureRequest} disabled={isSubmitting || !requestEmail || !requestMessage}>
+                  {isSubmitting ? 'Submitting…' : 'Submit'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* GitHub Repo */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            asChild
+            disabled={!GITHUB_URL}
+            title="Open GitHub"
+          >
+            <a href={GITHUB_URL || '#'} target="_blank" rel="noreferrer">
+              {/* <Github className="h-4 w-4" /> */}
+              <img src="/github.svg" alt="GitHub" className="h-4 w-4 dark:invert" />
+            </a>
+          </Button>
+          
           {/* Theme Switcher */}
           <Button
             variant="ghost"
