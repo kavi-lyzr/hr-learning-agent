@@ -4,12 +4,13 @@
  * Tool endpoint for Lyzr Tutor Agent.
  * Fetches complete module content with all lessons including article text and video transcripts.
  * Requires x-token authentication from Lyzr agent tool calls.
+ *
+ * NOTE: Modules and lessons are EMBEDDED in the Course document, not separate collections.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
-import Module from '@/models/module';
-import Lesson from '@/models/lesson';
+import Course from '@/models/course';
 import { validateToolToken } from '@/lib/middleware/tool-auth';
 import mongoose from 'mongoose';
 
@@ -47,31 +48,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch module
-    const module = await Module.findById(moduleId).lean();
+    // Find the course that contains this module (modules are embedded)
+    const course = await Course.findOne({
+      organizationId,
+      'modules._id': moduleId
+    }).lean();
 
-    if (!module) {
+    if (!course) {
       return NextResponse.json(
         { error: 'Module not found' },
         { status: 404 }
       );
     }
 
-    // Verify module belongs to the organization
-    if (module.organizationId.toString() !== organizationId) {
+    // Extract the specific module from the modules array
+    const module = course.modules.find((m: any) => m._id.toString() === moduleId);
+
+    if (!module) {
       return NextResponse.json(
-        { error: 'Module does not belong to this organization' },
-        { status: 403 }
+        { error: 'Module not found in course' },
+        { status: 404 }
       );
     }
 
-    // Fetch all lessons in this module
-    const lessons = await Lesson.find({ moduleId: module._id })
-      .sort({ order: 1 })
-      .lean();
+    // Helper function to sanitize HTML to plain text
+    function sanitizeHtml(html: string): string {
+      if (!html) return '';
+      return html
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
 
-    // Process each lesson
-    const processedLessons = lessons.map((lesson) => {
+    // Process each lesson (lessons are embedded in the module)
+    const processedLessons = (module.lessons || []).map((lesson: any) => {
       const lessonData: any = {
         lessonId: lesson._id.toString(),
         title: lesson.title,
@@ -81,23 +91,24 @@ export async function POST(request: NextRequest) {
       };
 
       // Extract article text from HTML (strip tags)
-      if (lesson.contentType === 'article' && lesson.contentData?.articleHtml) {
-        const articleText = lesson.contentData.articleHtml
-          .replace(/<[^>]*>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
+      if ((lesson.contentType === 'article' || lesson.contentType === 'video-article') && lesson.content?.articleHtml) {
+        const articleText = sanitizeHtml(lesson.content.articleHtml);
         lessonData.articleText = articleText;
         lessonData.wordCount = articleText.split(/\s+/).length;
       }
 
-      // Always include video transcript if available
-      if (lesson.contentType === 'video') {
-        lessonData.videoUrl = lesson.contentData?.videoUrl || '';
-        lessonData.videoDuration = lesson.contentData?.videoDuration || 0;
+      // Include video information and transcript if available
+      if ((lesson.contentType === 'video' || lesson.contentType === 'video-article')) {
+        lessonData.videoUrl = lesson.content?.videoUrl || '';
+        lessonData.videoDuration = lesson.duration || 0;
 
-        if (lesson.contentData?.transcript) {
-          lessonData.transcript = lesson.contentData.transcript;
+        // Transcript is an array of {text, start, duration} objects
+        if (lesson.content?.transcript && Array.isArray(lesson.content.transcript)) {
+          // Join all transcript text segments
+          const transcriptText = lesson.content.transcript
+            .map((t: any) => t.text)
+            .join(' ');
+          lessonData.transcript = transcriptText;
         }
       }
 
@@ -114,14 +125,16 @@ export async function POST(request: NextRequest) {
 
     // Build response
     const response = {
-      moduleId: module._id.toString(),
+      courseId: course._id.toString(),
+      courseTitle: course.title,
+      moduleId: (module._id as mongoose.Types.ObjectId)?.toString() || '',
       moduleTitle: module.title,
       moduleDescription: module.description || '',
       lessonCount: processedLessons.length,
       lessons: processedLessons,
     };
 
-    console.log(`✅ Tool call: get_module_content - Returned module: ${module.title} with ${processedLessons.length} lessons`);
+    console.log(`✅ Tool call: get_module_content - Returned module: "${module.title}" from course: "${course.title}" with ${processedLessons.length} lessons`);
 
     return NextResponse.json(response);
 

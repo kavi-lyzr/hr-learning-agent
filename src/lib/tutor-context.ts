@@ -83,7 +83,7 @@ export async function buildTutorSystemPrompt(
   let prompt = BASE_PROMPT;
 
   // Add user context
-  prompt += `\n\n## Current Learner\n\n- **Name**: ${userName}\n- **Date & Time**: ${currentDateTime}`;
+  prompt += `\n\n## Current Learner\n\n- **Name**: ${userName}\n- **User ID**: ${userId}\n- **Date & Time**: ${currentDateTime}`;
 
   // Fetch enrolled courses with structure
   const enrollments = await Enrollment.find({
@@ -270,8 +270,9 @@ export async function buildTutorSystemPrompt(
   // Add reminder about tool usage
   prompt += `\n\n## Tool Usage Reminder\n\n`;
   prompt += `- Use **get_module_content** when you need to fetch complete module materials (all lessons, articles, and transcripts)\n`;
+  prompt += `  - Always include the Module ID when calling get_module_content (shown in brackets above as [Module ID: ...])\n`;
   prompt += `- Use **get_user_progress** when asked about completion status, quiz scores, or learning progress\n`;
-  prompt += `- Always include the Module ID when calling get_module_content (shown in brackets above as [Module ID: ...])\n`;
+  prompt += `  - IMPORTANT: Always use the User ID from the "Current Learner" section above (${userId})\n`;
 
   return prompt;
 }

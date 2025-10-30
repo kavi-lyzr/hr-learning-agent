@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     const tutorPrompt = await buildTutorSystemPrompt(contextOptions);
     console.log('✅ Tutor prompt built, length:', tutorPrompt.length);
 
-    // Call tutor agent with dynamic prompt
+    // Call tutor agent with dynamic prompt and user context
     console.log('💬 Sending message to Tutor Agent...');
     const response = await chatWithLyzrAgent(
       ownerApiKey,
@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
       userId, // Lyzr user ID
       {
         prompt: tutorPrompt, // Dynamic prompt passed as system_prompt_variable
+        user_id: userId, // User's Lyzr ID for tool calls (CRITICAL for get_user_progress)
       },
       sessionId // Reuse session if provided
     );

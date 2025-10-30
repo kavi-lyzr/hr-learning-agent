@@ -7,6 +7,7 @@
  * - User-agent orchestration
  */
 
+import mongoose from 'mongoose';
 import User, { IUser } from '@/models/user';
 import Organization from '@/models/organization';
 import { encrypt, decrypt } from '@/lib/encryption';
@@ -106,16 +107,31 @@ async function createLyzrAgent(apiKey: string, agentConfig: any, organizationNam
 /**
  * Update an existing Lyzr agent
  */
-async function updateLyzrAgent(apiKey: string, agentId: string, agentConfig: any): Promise<void> {
-    // Remove agentType from payload (internal use only)
-    const { agentType, ...configPayload } = agentConfig;
+async function updateLyzrAgent(apiKey: string, agentId: string, agentConfig: any, organizationName?: string, toolIds?: string[]): Promise<void> {
+    // Remove agentType and tools from payload (internal use only)
+    const { agentType, tools, ...configPayload } = agentConfig;
+
+    // Add organization suffix to agent name if provided
+    const agentName = organizationName
+        ? `${agentConfig.name} - ${organizationName}`
+        : agentConfig.name;
+
+    // Create tool_configs array with action descriptions for each tool (if tools provided)
+    const toolConfigs = toolIds ? toolIds.map(toolId => ({
+        tool_name: toolId,
+        tool_source: "openapi",
+        action_names: [getToolDescription(toolId)],
+        persist_auth: false
+    })) : undefined;
 
     const payload = {
         ...configPayload,
+        name: agentName,
         store_messages: true,
+        ...(toolIds && { tools: toolIds, tool_configs: toolConfigs }),
     };
 
-    console.log(`Updating ${agentType} agent: ${agentId}`);
+    console.log(`Updating ${agentType} agent: ${agentId} with name: ${agentName}`);
 
     const response = await fetch(AGENT_UPDATE_ENDPOINT(agentId), {
         method: 'PUT',
@@ -129,10 +145,10 @@ async function updateLyzrAgent(apiKey: string, agentId: string, agentConfig: any
     if (!response.ok) {
         const errorText = await response.text();
         console.error(`Failed to update ${agentType} agent:`, response.status, errorText);
-        throw new Error(`Failed to update ${agentConfig.name}: ${response.status} ${errorText}`);
+        throw new Error(`Failed to update ${agentName}: ${response.status} ${errorText}`);
     }
 
-    console.log(`Successfully updated ${agentType} agent: ${agentId}`);
+    console.log(`Successfully updated ${agentType} agent: ${agentId} with name: ${agentName}`);
 }
 
 // --- User Management (Simple - No Agents) ---
@@ -161,7 +177,6 @@ export async function createOrUpdateUser(
         }
 
         await user.save();
-        return user;
     } else {
         // Create new user
         console.log(`Creating new user: ${lyzrUser.email}`);
@@ -174,8 +189,32 @@ export async function createOrUpdateUser(
 
         await newUser.save();
         console.log(`Successfully created user: ${newUser.email}`);
-        return newUser;
+        user = newUser;
     }
+
+    // CRITICAL: Link user to any pending organization invitations
+    // When an admin invites an employee, an OrganizationMember record is created with email but no userId
+    // When that employee logs in, we need to link them to that invitation
+    const OrganizationMember = (await import('@/models/organizationMember')).default;
+
+    const pendingInvitations = await OrganizationMember.find({
+        email: lyzrUser.email.toLowerCase(),
+        userId: { $exists: false } // Find invitations without userId
+    });
+
+    if (pendingInvitations.length > 0) {
+        console.log(`🔗 Found ${pendingInvitations.length} pending invitation(s) for ${lyzrUser.email}`);
+
+        // Link all invitations to this user
+        for (const invitation of pendingInvitations) {
+            invitation.userId = user._id as mongoose.Types.ObjectId;
+            invitation.status = 'active'; // Change from 'invited' to 'active'
+            await invitation.save();
+            console.log(`✅ Linked user to organization: ${invitation.organizationId}`);
+        }
+    }
+
+    return user;
 }
 
 // --- Tool Management ---
@@ -561,18 +600,13 @@ export async function ensureOrganizationAgentsUpToDate(
     ) {
         if (organization.tutorAgent?.agentId) {
             console.log(`Updating tutor agent for ${organization.name}...`);
-            // Create updated agent config with new tools
-            const updatedConfig = {
-                ...TUTOR_AGENT_CONFIG,
-                tools: newToolIds,
-                tool_configs: newToolIds.map(toolId => ({
-                    tool_name: toolId,
-                    tool_source: "openapi",
-                    action_names: [getToolDescription(toolId)],
-                    persist_auth: false
-                })),
-            };
-            await updateLyzrAgent(ownerApiKey, organization.tutorAgent.agentId, updatedConfig);
+            await updateLyzrAgent(
+                ownerApiKey,
+                organization.tutorAgent.agentId,
+                TUTOR_AGENT_CONFIG,
+                organization.name,
+                newToolIds
+            );
             organization.tutorAgent.version = LATEST_TUTOR_AGENT_VERSION;
             console.log(`✅ Updated tutor agent for ${organization.name}`);
         }
@@ -585,7 +619,12 @@ export async function ensureOrganizationAgentsUpToDate(
             organization.quizGeneratorAgent.version !== LATEST_QUIZ_GENERATOR_AGENT_VERSION)
     ) {
         console.log(`Updating quiz generator agent for ${organization.name}...`);
-        await updateLyzrAgent(ownerApiKey, organization.quizGeneratorAgent.agentId, QUIZ_GENERATOR_AGENT_CONFIG);
+        await updateLyzrAgent(
+            ownerApiKey,
+            organization.quizGeneratorAgent.agentId,
+            QUIZ_GENERATOR_AGENT_CONFIG,
+            organization.name
+        );
         organization.quizGeneratorAgent.version = LATEST_QUIZ_GENERATOR_AGENT_VERSION;
         console.log(`✅ Updated quiz generator agent for ${organization.name}`);
     }
@@ -597,7 +636,12 @@ export async function ensureOrganizationAgentsUpToDate(
             organization.contentGeneratorAgent.version !== LATEST_CONTENT_GENERATOR_AGENT_VERSION)
     ) {
         console.log(`Updating content generator agent for ${organization.name}...`);
-        await updateLyzrAgent(ownerApiKey, organization.contentGeneratorAgent.agentId, CONTENT_GENERATOR_AGENT_CONFIG);
+        await updateLyzrAgent(
+            ownerApiKey,
+            organization.contentGeneratorAgent.agentId,
+            CONTENT_GENERATOR_AGENT_CONFIG,
+            organization.name
+        );
         organization.contentGeneratorAgent.version = LATEST_CONTENT_GENERATOR_AGENT_VERSION;
         console.log(`✅ Updated content generator agent for ${organization.name}`);
     }

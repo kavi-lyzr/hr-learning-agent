@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import User from '@/models/user';
+import Course from '@/models/course'; // CRITICAL: Must import to register model for populate()
 import Enrollment from '@/models/enrollment';
 import LessonProgress from '@/models/lessonProgress';
 import QuizAttempt from '@/models/quizAttempt';

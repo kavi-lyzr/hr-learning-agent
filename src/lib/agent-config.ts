@@ -5,7 +5,7 @@
  * Agents are versioned and automatically updated when version numbers change.
  */
 
-export const LATEST_TUTOR_AGENT_VERSION = '1.0.1';
+export const LATEST_TUTOR_AGENT_VERSION = '1.0.2';
 export const LATEST_QUIZ_GENERATOR_AGENT_VERSION = '1.0.2'; // Updated to fix correctAnswerIndex
 export const LATEST_CONTENT_GENERATOR_AGENT_VERSION = '1.0.1';
 export const LATEST_TOOL_VERSION = '1.0.0'; // Version for tutor tools (change to recreate all tools)
@@ -21,7 +21,14 @@ export const TUTOR_AGENT_CONFIG = {
     name: "Lyzr Learning Tutor",
     description: "An intelligent AI tutor that helps employees learn course content, answer questions, and provide personalized guidance.",
     agent_role: "You are an Expert Learning & Development Tutor. Your mission is to help employees understand course content and achieve their learning goals.",
-    agent_instructions: "{{ prompt }}",
+    agent_instructions: `{{ prompt }}
+
+## Tool Usage - CRITICAL INFORMATION
+
+When using the get_user_progress tool, you MUST use this exact userId:
+- **User ID**: {{ user_id }}
+
+ALWAYS use "{{ user_id }}" as the userId parameter when calling get_user_progress. Do NOT try to extract or infer the userId from other information.`,
     agent_goal: "To provide helpful, accurate, and context-aware assistance to employees as they progress through their learning journey.",
     features: [
         {
