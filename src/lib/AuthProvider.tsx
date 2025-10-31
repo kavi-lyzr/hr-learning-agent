@@ -19,11 +19,16 @@ interface AuthContextType {
   token: string | null;
   email: string | null;
   displayName: string | null;
+  credits: number | null;
+  totalCredits: number | null;
+  usedCredits: number | null;
+  refreshCredits: () => Promise<void> | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const pagosUrl = process.env.NEXT_PUBLIC_PAGOS_URL || 'https://pagos-prod.studio.lyzr.ai';
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -40,6 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [credits, setCredits] = useState<number>(0);
+  const [totalCredits, setTotalCredits] = useState<number>(0);
+  const [usedCredits, setUsedCredits] = useState<number>(0);
+  const [pagosToken, setPagosToken] = useState<string | null>(null);
 
   // Prevent duplicate auth calls
   const authCallInProgress = useRef(false);
@@ -51,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Cookies.remove('email');
     Cookies.remove('display_name');
     Cookies.remove('current_organization');
+    Cookies.remove('pagos_token');
     setIsAuthenticated(false);
     setUserId(null);
     setToken(null);
@@ -108,6 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const userKeys = await lyzr.getKeysUser();
             userEmail = userKeys?.data?.user?.email;
             userName = userKeys?.data?.user?.name;
+            setCredits(userKeys?.data?.available_credits || 0);
+            setPagosToken(userKeys?.token || null);
+            Cookies.set('pagos_token', userKeys?.token || null, { expires: 7 });
           } catch (error) {
             console.error('Error fetching user keys, proceeding with token data only.', error);
           }
@@ -115,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const nameFromEmail = userEmail ? userEmail.split('@')[0].charAt(0).toUpperCase() + userEmail.split('@')[0].slice(1) : 'User';
           const finalUserName = userName || nameFromEmail;
 
-          setAuthData(tokenData[0], userEmail, finalUserName);
+          setAuthData(tokenData[0], userEmail, finalUserName);        
           return;
         }
 
@@ -126,6 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const userKeys = await lyzr.getKeysUser();
           userEmail = userKeys?.data?.user?.email;
           userName = userKeys?.data?.user?.name;
+          setCredits(userKeys?.data?.available_credits || 0);
+          setPagosToken(userKeys?.token || null);
+          Cookies.set('pagos_token', userKeys?.token || null, { expires: 7 });
         } catch (error) {
           console.error('Error fetching user keys, proceeding with token data only.', error);
         }
@@ -156,7 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Redirect to organizations page after successful auth (only on first login)
           if (window.location.pathname === '/') {
-            window.location.href = '/organizations';
+            window.history.pushState({}, '', '/organizations');
           }
         } else {
           console.error('Failed to sync with backend');
@@ -210,6 +226,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // const checkCredits = async () => {
+  //   if (typeof window === 'undefined') return 0;
+  //   // try {
+  //   //   // const { default: lyzr } = await import('lyzr-agent');
+  //   //   const userKeys = await lyzr?.getKeysUser();
+  //   //   setCredits(userKeys?.data?.available_credits || 0);
+  //   //   return credits;
+  //   // } catch (error) {
+  //   //   console.error('Check credits failed:', error);
+  //   //   return 0;  
+  //   // }
+  //   const publicKey = process.env.NEXT_PUBLIC_LYZR_PUBLIC_KEY || 'pk_c14a2728e715d9ea67bf';
+  //   await lyzr.init(publicKey);
+  //   const tokenData = await lyzr.getKeys() as unknown as TokenData[];
+  //   if (tokenData && tokenData[0]) {
+  //     const userKeys = await lyzr.getKeysUser();
+  //     setCredits(userKeys?.data?.available_credits || 0);
+  //     return userKeys?.data?.available_credits || 0;
+  //   }
+  //   return 0;
+  // };
+
+  const refreshCredits = async (): Promise<void> => {
+    try {
+      if (!pagosToken){
+        setPagosToken(Cookies.get('pagos_token') || null);
+      }
+      const response = await fetch(`${pagosUrl}/api/v1/usages/current`, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+          authorization: `Bearer ${pagosToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const totalCredits =
+        (data.recurring_credits || 0) +
+        (data.paid_credits || 0) +
+        (data.used_credits || 0);
+      const usedCredits = data.used_credits || 0;
+      const remainingCredits =
+        (data.recurring_credits || 0) + (data.paid_credits || 0);
+
+      setTotalCredits(totalCredits);
+      setCredits(usedCredits);
+      setUsedCredits(usedCredits);
+    } catch (error) {
+      console.error("Error refreshing credits:", error);
+    }
+  }
+
   useEffect(() => {
     const init = async () => {
       if (typeof window === 'undefined') return;
@@ -219,6 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const savedToken = Cookies.get('token');
       const savedEmail = Cookies.get('email');
       const savedDisplayName = Cookies.get('display_name');
+      const savedPagosToken = Cookies.get('pagos_token');
 
       if (savedUserId && savedToken) {
         console.log('Restoring auth from cookies');
@@ -228,6 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setEmail(savedEmail || null);
         setDisplayName(savedDisplayName || null);
         setIsLoading(false);
+        setPagosToken(savedPagosToken || null);
         // Mark as already synced to prevent API call
         lastSuccessfulAuthCall.current = savedUserId;
         return;
@@ -271,7 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // Run only once on mount
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, userId, token, email, displayName, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, userId, token, email, displayName, credits, totalCredits, usedCredits, login, logout, refreshCredits }}>
       {children}
     </AuthContext.Provider>
   );

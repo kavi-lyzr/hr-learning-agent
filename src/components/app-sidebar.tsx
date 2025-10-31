@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -13,6 +13,9 @@ import {
   LogOut,
   ChevronUp,
   Bot,
+  RefreshCcw,
+  Info,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -35,6 +38,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/lib/AuthProvider";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 
 // Admin navigation items
 const adminNavItems = [
@@ -103,7 +110,22 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ role = "admin", user, organization }: AppSidebarProps) {
+  const { credits, totalCredits, usedCredits, refreshCredits } = useAuth();
   const navItems = role === "admin" ? adminNavItems : employeeNavItems;
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    refreshCredits();
+  }, []);
+
+  const handleRefreshCredits = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshCredits();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <Sidebar>
@@ -169,6 +191,80 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
       </SidebarContent>
 
       <SidebarFooter>
+        {/* Credits Section */}
+        <div className="px-3 py-3 space-y-2 border-b">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Credits Left</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-medium text-muted-foreground text-right">
+                {credits?.toLocaleString() || "0"}
+              </span>
+              <button
+                onClick={handleRefreshCredits}
+                disabled={isRefreshing}
+                className="p-1 hover:bg-accent rounded transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-default"
+                aria-label="Refresh credits"
+              >
+                <RefreshCcw className={`h-3 w-3 text-muted-foreground ${isRefreshing ? "animate-spin" : ""}`} />
+              </button>
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  <button
+                    className="p-1 hover:bg-accent rounded transition-colors"
+                    aria-label="View credits summary"
+                  >
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                </HoverCardTrigger>
+                <HoverCardContent align="end" className="w-64">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3">Credits Summary</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Total Credits</span>
+                          <span className="text-sm font-medium">
+                            {totalCredits?.toLocaleString() || "0"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Used Credits</span>
+                          <span className="text-sm font-medium">
+                            {usedCredits?.toLocaleString() || "0"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Credits Left</span>
+                          <span className="text-sm font-medium">
+                            {credits?.toLocaleString() || "0"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        window.open("https://studio.lyzr.ai/upgrade-plan?section=topup", "_blank");
+                      }}
+                    >
+                      <Zap className="h-4 w-4" />
+                      Top up
+                    </Button>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            </div>
+          </div>
+         
+          {totalCredits && totalCredits > 0 && (
+            <Progress
+              value={(credits && credits > 0 ? (credits / totalCredits) * 100 : 0)}
+              className="h-1.5"
+            />
+          )}
+        </div>
+
+        {/* User Info Section */}
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -196,6 +292,12 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Account Settings</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <button onClick={refreshCredits}>
+                    <RefreshCcw className="mr-2 h-4 w-4" />
+                    Refresh Credits
+                  </button>
+                </DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
@@ -208,5 +310,6 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
 
       <SidebarRail />
     </Sidebar>
+
   );
 }
