@@ -86,9 +86,10 @@ export async function buildTutorSystemPrompt(
   prompt += `\n\n## Current Learner\n\n- **Name**: ${userName}\n- **User ID**: ${userId}\n- **Date & Time**: ${currentDateTime}`;
 
   // Fetch enrolled courses with structure
+  // Convert organizationId string to ObjectId to avoid BSON errors
   const enrollments = await Enrollment.find({
     userId: user._id,
-    organizationId,
+    organizationId: new mongoose.Types.ObjectId(organizationId),
   })
     .populate({
       path: 'courseId',

@@ -34,11 +34,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Build query
+    // Build query - CRITICAL: Convert string IDs to ObjectIds for MongoDB
     const query: any = { userId: user._id };
     if (organizationId) {
-      query.organizationId = organizationId;
+      // Validate organizationId format
+      if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+        return NextResponse.json(
+          { error: 'Invalid organizationId format' },
+          { status: 400 }
+        );
+      }
+      // Convert to ObjectId to avoid BSON errors
+      query.organizationId = new mongoose.Types.ObjectId(organizationId);
     }
+
+    console.log('🔍 Querying enrollments:', { userId: user._id.toString(), organizationId });
 
     // Get enrollments with course details
     const enrollments = await Enrollment.find(query)
@@ -49,21 +59,31 @@ export async function GET(request: NextRequest) {
       .sort({ enrolledAt: -1 })
       .lean();
 
+    console.log(`✅ Found ${enrollments.length} enrollment(s)`);
+
     // Calculate total lessons for each course and convert thumbnails to presigned URLs
     const enrollmentsWithStats = await Promise.all(enrollments.map(async (enrollment: any) => {
       const course = enrollment.courseId;
-      const totalLessons = course?.modules?.reduce(
+
+      // Handle case where course was deleted or populate failed
+      if (!course) {
+        console.warn(`⚠️  Enrollment ${enrollment._id} has no course (courseId: ${enrollment.courseId})`);
+        return {
+          ...enrollment,
+          course: null,
+        };
+      }
+
+      const totalLessons = course.modules?.reduce(
         (sum: number, module: any) => sum + (module.lessons?.length || 0),
         0
       ) || 0;
 
       // Convert thumbnail to presigned URL if it's an S3 URL
-      let thumbnailUrl = course?.thumbnailUrl;
+      let thumbnailUrl = course.thumbnailUrl;
       if (thumbnailUrl && isS3Url(thumbnailUrl)) {
         try {
-          console.log('🔄 Converting thumbnail URL:', thumbnailUrl);
           thumbnailUrl = await getSignedImageUrl(thumbnailUrl);
-          console.log('✅ Converted to signed URL:', thumbnailUrl.substring(0, 100) + '...');
         } catch (error) {
           console.error('❌ Error getting signed URL for thumbnail:', error);
         }
@@ -72,14 +92,14 @@ export async function GET(request: NextRequest) {
       return {
         ...enrollment,
         course: {
-          _id: course?._id,
-          title: course?.title,
-          description: course?.description,
-          category: course?.category,
+          _id: course._id,
+          title: course.title,
+          description: course.description,
+          category: course.category,
           thumbnailUrl,
-          estimatedDuration: course?.estimatedDuration,
+          estimatedDuration: course.estimatedDuration,
           totalLessons,
-          status: course?.status,
+          status: course.status,
         },
       };
     }));

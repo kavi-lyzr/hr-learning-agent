@@ -35,12 +35,13 @@ interface Lesson {
   _id: string;
   title: string;
   description?: string;
-  contentType: 'video' | 'article';
+  contentType: 'video' | 'article' | 'video-article';
   content: {
     videoUrl?: string;
     articleHtml?: string;
+    transcript?: any[];
   };
-  estimatedDuration: number;
+  duration: number; // Duration in minutes
   order: number;
   hasQuiz: boolean;
   quizData?: {
@@ -173,10 +174,9 @@ export default function LessonViewerPage() {
         if (progress >= 0.9) {
           shouldComplete = true;
         }
-      } else if (lesson.contentType === 'article') {
-        // Complete when 80% scrolled AND 50% of estimated time spent
-        const estimatedSeconds = lesson.estimatedDuration * 60;
-        if (scrollDepth >= 80 && timeSpent >= estimatedSeconds * 0.5) {
+      } else if (lesson.contentType === 'article' || lesson.contentType === 'video-article') {
+        // Complete when 80% scrolled (removed time requirement)
+        if (scrollDepth >= 80) {
           shouldComplete = true;
         }
       }
@@ -462,13 +462,18 @@ export default function LessonViewerPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  {lesson.contentType === 'video' ? (
+                  {lesson.contentType === 'video-article' ? (
+                    <>
+                      <VideoIcon className="h-5 w-5 text-muted-foreground" />
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                    </>
+                  ) : lesson.contentType === 'video' ? (
                     <VideoIcon className="h-5 w-5 text-muted-foreground" />
                   ) : (
                     <FileText className="h-5 w-5 text-muted-foreground" />
                   )}
                   <Badge variant="outline" className="capitalize">
-                    {lesson.contentType}
+                    {lesson.contentType.replace('-', ' + ')}
                   </Badge>
                   {isCompleted && (
                     <Badge variant="default" className="gap-1">
@@ -491,9 +496,10 @@ export default function LessonViewerPage() {
         </Card>
 
         {/* Lesson Content */}
-        <Card>
-          <CardContent className="p-0">
-            {lesson.contentType === 'video' && lesson.content.videoUrl ? (
+        {/* Video Content */}
+        {(lesson.contentType === 'video' || lesson.contentType === 'video-article') && lesson.content.videoUrl && (
+          <Card>
+            <CardContent className="p-0">
               <div className="aspect-video w-full">
                 <iframe
                   ref={videoRef}
@@ -510,19 +516,31 @@ export default function LessonViewerPage() {
                   }}
                 />
               </div>
-            ) : lesson.contentType === 'article' && lesson.content.articleHtml ? (
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Article Content */}
+        {(lesson.contentType === 'article' || lesson.contentType === 'video-article') && lesson.content.articleHtml && (
+          <Card>
+            <CardContent className="p-0">
               <div
                 ref={articleRef}
                 className="prose prose-sm md:prose-base lg:prose-lg max-w-none p-6 md:p-8 lg:p-12 overflow-y-auto max-h-[600px]"
                 dangerouslySetInnerHTML={{ __html: lesson.content.articleHtml }}
               />
-            ) : (
-              <div className="p-12 text-center text-muted-foreground">
-                No content available for this lesson
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* No Content Fallback */}
+        {!lesson.content.videoUrl && !lesson.content.articleHtml && (
+          <Card>
+            <CardContent className="p-12 text-center text-muted-foreground">
+              No content available for this lesson
+            </CardContent>
+          </Card>
+        )}
 
         {/* Progress Indicator */}
         {!isCompleted && (
@@ -534,6 +552,10 @@ export default function LessonViewerPage() {
                   {lesson.contentType === 'video' ? (
                     <span className="text-muted-foreground">
                       {Math.round((watchTime / videoDuration) * 100)}% watched (90% to complete)
+                    </span>
+                  ) : lesson.contentType === 'video-article' ? (
+                    <span className="text-muted-foreground">
+                      Video: {Math.round((watchTime / videoDuration) * 100)}%, Article: {scrollDepth}%
                     </span>
                   ) : (
                     <span className="text-muted-foreground">
@@ -549,9 +571,9 @@ export default function LessonViewerPage() {
                   }
                   className="h-2"
                 />
-                {lesson.contentType === 'article' && (
+                {(lesson.contentType === 'article' || lesson.contentType === 'video-article') && (
                   <p className="text-xs text-muted-foreground">
-                    Scroll to 80% and spend at least {Math.floor(lesson.estimatedDuration / 2)} minutes to complete
+                    Scroll article to 80% to complete
                   </p>
                 )}
               </div>

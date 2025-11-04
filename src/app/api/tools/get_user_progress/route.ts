@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       const enrollment = await Enrollment.findOne({
         userId: userMongoId,
         courseId,
-        organizationId,
+        organizationId: new mongoose.Types.ObjectId(organizationId), // Convert string to ObjectId
       })
         .populate('courseId', 'title description')
         .lean();
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
     // Case 3: Get all enrollments for the user in this organization
     const enrollments = await Enrollment.find({
       userId: userMongoId,
-      organizationId,
+      organizationId: new mongoose.Types.ObjectId(organizationId), // Convert string to ObjectId
     })
       .populate('courseId', 'title description')
       .sort({ enrolledAt: -1 })
