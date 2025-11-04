@@ -32,7 +32,7 @@ interface Lesson {
     articleHtml?: string;
   };
   order: number;
-  estimatedDuration: number;
+  duration: number;
 }
 
 interface Module {
@@ -387,7 +387,7 @@ export default function CourseDetailPage() {
                                           </Badge>
                                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                                             <Clock className="h-3 w-3" />
-                                            {lesson.estimatedDuration} min
+                                            {lesson.duration} min
                                           </span>
                                           {isCurrent && (
                                             <Badge variant="default" className="text-xs">

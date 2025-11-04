@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import RTE from "@/components/RTE";
 import { convertToSignedUrls, convertToDirectUrls } from "@/lib/s3-utils";
+import { estimateLessonDuration, calculateCourseDuration } from "@/lib/duration-utils";
 import {
   ChevronLeft,
   Loader2,
@@ -438,6 +439,21 @@ export default function LessonEditorPage() {
         ? convertToDirectUrls(formData.articleContent)
         : undefined;
 
+      // Auto-estimate duration if not provided (0 or undefined)
+      let finalDuration = formData.duration;
+      if (!finalDuration || finalDuration === 0) {
+        finalDuration = estimateLessonDuration({
+          contentType: formData.contentType,
+          duration: formData.duration,
+          content: {
+            articleHtml: formData.articleHtml,
+            transcript: formData.transcript.length > 0 ? formData.transcript : undefined,
+            videoUrl: formData.videoUrl,
+          },
+        });
+        console.log(`📊 Auto-estimated lesson duration: ${finalDuration} minutes`);
+      }
+
       const lessonData = {
         title: formData.title,
         description: formData.description,
@@ -448,7 +464,7 @@ export default function LessonEditorPage() {
           articleContent: articleContentForStorage,
           articleHtml: formData.articleHtml || undefined,
         },
-        duration: formData.duration,
+        duration: finalDuration,
         hasQuiz: formData.hasQuiz,
         quizData: formData.quizData || undefined,
         order: isNew ? module.lessons.length : existingLessonOrder,
@@ -477,10 +493,17 @@ export default function LessonEditorPage() {
         return m;
       });
 
+      // Calculate total course duration from all lessons
+      const totalCourseDuration = calculateCourseDuration(updatedModules);
+      console.log(`📊 Total course duration: ${totalCourseDuration} minutes`);
+
       const response = await fetch(`/api/courses/${courseId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modules: updatedModules }),
+        body: JSON.stringify({
+          modules: updatedModules,
+          estimatedDuration: totalCourseDuration,
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to save lesson');

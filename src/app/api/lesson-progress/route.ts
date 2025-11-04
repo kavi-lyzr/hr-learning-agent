@@ -146,17 +146,28 @@ async function updateEnrollmentProgress(
 ) {
   try {
     const enrollment = await Enrollment.findOne({ userId, courseId });
-    if (!enrollment) return;
+    if (!enrollment) {
+      console.warn(`⚠️  No enrollment found for userId: ${userId}, courseId: ${courseId}`);
+      return;
+    }
 
     // Add lesson to completed list if not already there
     const lessonObjectId = new mongoose.Types.ObjectId(lessonId);
-    if (!enrollment.progress.completedLessonIds.some(id => id.equals(lessonObjectId))) {
+    const alreadyCompleted = enrollment.progress.completedLessonIds.some(id => id.equals(lessonObjectId));
+
+    if (!alreadyCompleted) {
       enrollment.progress.completedLessonIds.push(lessonObjectId);
+      console.log(`✅ Marked lesson ${lessonId} as completed`);
+    } else {
+      console.log(`ℹ️  Lesson ${lessonId} was already marked as completed`);
     }
 
     // Get total lessons in course
     const course = await Course.findById(courseId);
-    if (!course) return;
+    if (!course) {
+      console.warn(`⚠️  Course not found: ${courseId}`);
+      return;
+    }
 
     const totalLessons = course.modules.reduce(
       (sum, module) => sum + (module.lessons?.length || 0),
@@ -165,19 +176,24 @@ async function updateEnrollmentProgress(
 
     // Calculate progress percentage
     const completedCount = enrollment.progress.completedLessonIds.length;
+    const oldPercentage = enrollment.progressPercentage;
     enrollment.progressPercentage = totalLessons > 0
       ? Math.round((completedCount / totalLessons) * 100)
       : 0;
+
+    console.log(`📊 Course Progress: ${completedCount}/${totalLessons} lessons (${oldPercentage}% → ${enrollment.progressPercentage}%)`);
 
     // Update status
     if (enrollment.status === 'not-started') {
       enrollment.status = 'in-progress';
       enrollment.startedAt = new Date();
+      console.log(`🚀 Course started`);
     }
 
     if (enrollment.progressPercentage === 100 && enrollment.status !== 'completed') {
       enrollment.status = 'completed';
       enrollment.completedAt = new Date();
+      console.log(`🎉 Course completed!`);
     }
 
     // Set current lesson

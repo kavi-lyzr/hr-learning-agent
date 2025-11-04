@@ -119,18 +119,27 @@ export default function LessonViewerPage() {
 
   // Track scroll depth for articles
   useEffect(() => {
-    if (lesson?.contentType === 'article' && articleRef.current) {
+    if ((lesson?.contentType === 'article' || lesson?.contentType === 'video-article') && articleRef.current) {
+      const element = articleRef.current;
+
+      // Check if content is scrollable
+      const isScrollable = element.scrollHeight > element.clientHeight;
+
+      if (!isScrollable) {
+        // Content fits without scrolling - auto-complete
+        setScrollDepth(100);
+        return;
+      }
+
       const handleScroll = () => {
-        const element = articleRef.current;
         if (!element) return;
 
         const scrollTop = element.scrollTop;
         const scrollHeight = element.scrollHeight - element.clientHeight;
-        const depth = scrollHeight > 0 ? Math.round((scrollTop / scrollHeight) * 100) : 0;
+        const depth = scrollHeight > 0 ? Math.round((scrollTop / scrollHeight) * 100) : 100;
         setScrollDepth(Math.max(scrollDepth, depth));
       };
 
-      const element = articleRef.current;
       element.addEventListener('scroll', handleScroll);
       return () => element.removeEventListener('scroll', handleScroll);
     }
@@ -175,7 +184,8 @@ export default function LessonViewerPage() {
           shouldComplete = true;
         }
       } else if (lesson.contentType === 'article' || lesson.contentType === 'video-article') {
-        // Complete when 80% scrolled (removed time requirement)
+        // For articles or video-article lessons, just check article scroll
+        // Complete when 80% scrolled (or 100% if no scrolling needed)
         if (scrollDepth >= 80) {
           shouldComplete = true;
         }
@@ -254,7 +264,7 @@ export default function LessonViewerPage() {
       if (foundLesson.contentType === 'video' && foundLesson.content.videoUrl) {
         // We'll set a default duration or extract from YouTube API
         // For now, use estimated duration as approximation
-        setVideoDuration(foundLesson.estimatedDuration * 60);
+        setVideoDuration(foundLesson.duration * 60);
       }
     } catch (error: any) {
       console.error('Error fetching lesson:', error);
@@ -488,7 +498,7 @@ export default function LessonViewerPage() {
                 )}
                 <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  {lesson.estimatedDuration} min
+                  {lesson.duration} min
                 </div>
               </div>
             </div>
@@ -551,29 +561,25 @@ export default function LessonViewerPage() {
                   <span className="font-medium">Progress</span>
                   {lesson.contentType === 'video' ? (
                     <span className="text-muted-foreground">
-                      {Math.round((watchTime / videoDuration) * 100)}% watched (90% to complete)
-                    </span>
-                  ) : lesson.contentType === 'video-article' ? (
-                    <span className="text-muted-foreground">
-                      Video: {Math.round((watchTime / videoDuration) * 100)}%, Article: {scrollDepth}%
+                      {videoDuration > 0 ? Math.round((watchTime / videoDuration) * 100) : 0}% watched (90% to complete)
                     </span>
                   ) : (
                     <span className="text-muted-foreground">
-                      {scrollDepth}% scrolled, {Math.floor(timeSpent / 60)}m spent
+                      {scrollDepth}% read
                     </span>
                   )}
                 </div>
                 <Progress
                   value={
                     lesson.contentType === 'video'
-                      ? (watchTime / videoDuration) * 100
+                      ? (videoDuration > 0 ? (watchTime / videoDuration) * 100 : 0)
                       : scrollDepth
                   }
                   className="h-2"
                 />
                 {(lesson.contentType === 'article' || lesson.contentType === 'video-article') && (
                   <p className="text-xs text-muted-foreground">
-                    Scroll article to 80% to complete
+                    {scrollDepth >= 80 ? 'Ready to complete!' : 'Read to 80% to complete'}
                   </p>
                 )}
               </div>

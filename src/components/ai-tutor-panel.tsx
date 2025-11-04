@@ -213,7 +213,7 @@ export function AiTutorPanel() {
   }
 
   return (
-    <Card className="h-full flex flex-col shadow-lg border-l">
+    <Card className="h-full flex flex-col shadow-lg border-l rounded-none">
       {/* Header */}
       <div className="border-b p-4 bg-muted/30">
         <div className="flex items-center justify-between mb-2">
@@ -247,7 +247,7 @@ export function AiTutorPanel() {
             <span className="truncate">@ {currentContext.courseName}</span>
           </Badge>
         ) : (
-          <p className="text-xs text-muted-foreground">Always here to help</p>
+          <p className="text-xs text-muted-foreground">Always here to help :)</p>
         )}
       </div>
 
@@ -330,7 +330,7 @@ export function AiTutorPanel() {
             <Send className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
+        <p className="text-xs text-muted-foreground mt-4 w-full text-center">
           Powered by Lyzr AI
         </p>
       </div>

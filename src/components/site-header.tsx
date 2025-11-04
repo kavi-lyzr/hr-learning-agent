@@ -123,14 +123,14 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
   // Prevent hydration mismatch for theme-dependent UI
   if (!mounted) {
     return (
-      <header className="sticky top-0 z-50 border-b bg-background">
+      <header className="sticky top-0 z-50 border-b bg-background max-h-16 h-16">
         <div className="container mx-auto px-4 h-16" />
       </header>
     );
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 max-h-16 h-16">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Left: Breadcrumbs or Organization Name */}
         <div className="flex items-center gap-3 min-w-0 flex-1">

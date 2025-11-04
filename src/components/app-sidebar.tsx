@@ -129,7 +129,7 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b p-4">
+      <SidebarHeader className="border-b p-4 max-h-16 h-16">
         <div className="flex items-center gap-2">
           {organization?.iconUrl ? (
             <img
