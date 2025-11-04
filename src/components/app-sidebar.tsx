@@ -85,11 +85,6 @@ const employeeNavItems = [
     icon: BookOpen,
   },
   {
-    title: "My Progress",
-    url: "/employee/progress",
-    icon: GraduationCap,
-  },
-  {
     title: "AI Assistant",
     url: "/employee/ai-assistant",
     icon: Bot,
@@ -197,7 +192,7 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
             <span className="text-xs font-medium text-muted-foreground">Credits Left</span>
             <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-muted-foreground text-right">
-                {credits?.toLocaleString() || "0"}
+                {Math.floor(credits || 0).toLocaleString()}
               </span>
               <button
                 onClick={handleRefreshCredits}
@@ -224,19 +219,19 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Total Credits</span>
                           <span className="text-sm font-medium">
-                            {totalCredits?.toLocaleString() || "0"}
+                            {Math.floor(totalCredits || 0).toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Used Credits</span>
                           <span className="text-sm font-medium">
-                            {usedCredits?.toLocaleString() || "0"}
+                            {Math.floor(usedCredits || 0).toLocaleString()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Credits Left</span>
                           <span className="text-sm font-medium">
-                            {credits?.toLocaleString() || "0"}
+                            {Math.floor(credits || 0).toLocaleString()}
                           </span>
                         </div>
                       </div>
@@ -292,12 +287,12 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Account Settings</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                {/* <DropdownMenuItem asChild>
                   <button onClick={refreshCredits}>
                     <RefreshCcw className="mr-2 h-4 w-4" />
                     Refresh Credits
                   </button>
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
                 <DropdownMenuItem className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>

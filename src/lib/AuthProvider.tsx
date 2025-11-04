@@ -276,7 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (data.recurring_credits || 0) + (data.paid_credits || 0);
 
       setTotalCredits(totalCredits);
-      setCredits(usedCredits);
+      setCredits(remainingCredits);
       setUsedCredits(usedCredits);
     } catch (error) {
       console.error("Error refreshing credits:", error);

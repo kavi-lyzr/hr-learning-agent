@@ -4,6 +4,14 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import {
@@ -15,6 +23,7 @@ import {
   BarChart3,
   Layers,
   FileText,
+  UserPlus,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -26,15 +35,35 @@ interface DashboardStats {
   activeMembers: number;
 }
 
+interface ActivityEvent {
+  id: string;
+  type: 'enrollment' | 'lesson_completed' | 'quiz_attempted' | 'course_completed';
+  userId: string;
+  userName: string;
+  courseId?: string;
+  courseName?: string;
+  lessonId?: string;
+  lessonName?: string;
+  metadata?: {
+    score?: number;
+    passed?: boolean;
+    progressPercentage?: number;
+  };
+  timestamp: Date;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   useEffect(() => {
     if (currentOrganization) {
       fetchDashboardStats();
+      fetchRecentActivity();
     }
   }, [currentOrganization]);
 
@@ -87,6 +116,76 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchRecentActivity = async () => {
+    if (!currentOrganization) return;
+
+    try {
+      setActivitiesLoading(true);
+      const res = await fetch(`/api/organizations/${currentOrganization.id}/activity?limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        // Convert timestamp strings to Date objects
+        const activitiesWithDates = data.activities.map((activity: any) => ({
+          ...activity,
+          timestamp: new Date(activity.timestamp),
+        }));
+        setActivities(activitiesWithDates);
+      }
+    } catch (error) {
+      console.error('Error fetching recent activity:', error);
+    } finally {
+      setActivitiesLoading(false);
+    }
+  };
+
+  const getActivityDescription = (activity: ActivityEvent) => {
+    switch (activity.type) {
+      case 'enrollment':
+        return {
+          title: 'New enrollment',
+          description: `${activity.userName} enrolled in "${activity.courseName}"`,
+          color: 'bg-blue-500',
+        };
+      case 'lesson_completed':
+        return {
+          title: 'Lesson completed',
+          description: `${activity.userName} completed "${activity.lessonName}"`,
+          color: 'bg-green-500',
+        };
+      case 'quiz_attempted':
+        const passed = activity.metadata?.passed ? 'passed' : 'attempted';
+        const score = activity.metadata?.score ? ` (${activity.metadata.score}%)` : '';
+        return {
+          title: `Quiz ${passed}`,
+          description: `${activity.userName} ${passed} quiz in "${activity.lessonName}"${score}`,
+          color: activity.metadata?.passed ? 'bg-green-500' : 'bg-yellow-500',
+        };
+      case 'course_completed':
+        return {
+          title: 'Course completed',
+          description: `${activity.userName} completed "${activity.courseName}"`,
+          color: 'bg-primary',
+        };
+      default:
+        return {
+          title: 'Activity',
+          description: activity.userName,
+          color: 'bg-muted',
+        };
+    }
+  };
+
+  const getRelativeTime = (date: Date) => {
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    return date.toLocaleDateString();
+  };
+
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
             <div className="max-w-7xl mx-auto space-y-8 w-full">
@@ -98,10 +197,30 @@ export default function AdminDashboard() {
                     Overview of your L&D platform
                   </p>
                 </div>
-                <Button className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Quick Actions
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      <span className="hidden sm:inline">Quick Actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push('/admin/courses/new')}>
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      Create New Course
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push('/admin/employees')}>
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add Employee
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push('/admin/analytics')}>
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      View Analytics
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {/* Stats Cards */}
@@ -190,33 +309,53 @@ export default function AdminDashboard() {
                     <CardTitle className="text-lg">Recent Activity</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className="h-2 w-2 rounded-full bg-primary" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">New course created</p>
-                        <p className="text-xs text-muted-foreground">
-                          "Advanced React Patterns" - 2 hours ago
+                    {activitiesLoading ? (
+                      <>
+                        <div className="flex items-center gap-4">
+                          <Skeleton className="h-2 w-2 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Skeleton className="h-2 w-2 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Skeleton className="h-2 w-2 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        </div>
+                      </>
+                    ) : activities.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-sm text-muted-foreground">No recent activity</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Activity will appear here as employees engage with courses
                         </p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="h-2 w-2 rounded-full bg-primary" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">15 new employees added</p>
-                        <p className="text-xs text-muted-foreground">
-                          Engineering department - 5 hours ago
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="h-2 w-2 rounded-full bg-muted" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Course completed</p>
-                        <p className="text-xs text-muted-foreground">
-                          "Sales Training 101" by John Doe - 1 day ago
-                        </p>
-                      </div>
-                    </div>
+                    ) : (
+                      activities.slice(0, 5).map((activity) => {
+                        const { title, description, color } = getActivityDescription(activity);
+                        return (
+                          <div key={activity.id} className="flex items-center gap-4">
+                            <div className={`h-2 w-2 rounded-full ${color}`} />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {description} - {getRelativeTime(activity.timestamp)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </CardContent>
                 </Card>
 

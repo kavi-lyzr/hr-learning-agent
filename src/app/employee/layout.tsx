@@ -8,6 +8,11 @@ import { SiteHeader } from "@/components/site-header";
 import { AiTutorPanel } from "@/components/ai-tutor-panel";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 export default function EmployeeLayout({
   children,
@@ -50,17 +55,38 @@ export default function EmployeeLayout({
             iconUrl: currentOrganization.iconUrl,
           }}
         />
-        <div className="flex-1 flex w-full">
-          {/* Main Content Area */}
-          <div className="flex-1 flex flex-col min-w-0 w-full">
-            <SiteHeader />
-            {children}
-          </div>
+        <div className="flex-1 flex w-full min-w-0">
+          {!isAIAssistantPage ? (
+            <>
+              {/* Desktop: Resizable Panels */}
+              <div className="hidden md:flex flex-1">
+                <ResizablePanelGroup direction="horizontal" className="flex-1">
+                  {/* Main Content Panel */}
+                  <ResizablePanel defaultSize={75} minSize={50} className="flex flex-col">
+                    <SiteHeader />
+                    {children}
+                  </ResizablePanel>
 
-          {/* AI Tutor Panel - Hidden on AI Assistant page and small screens */}
-          {!isAIAssistantPage && (
-            <div className="w-96 hidden xl:block flex-shrink-0">
-              <AiTutorPanel />
+                  {/* AI Tutor Panel - Resizable */}
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={25} minSize={20} maxSize={40} className="flex flex-col">
+                    <AiTutorPanel />
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </div>
+
+              {/* Mobile: Full width with floating AI button */}
+              <div className="flex md:hidden flex-1 flex-col min-w-0 w-full">
+                <SiteHeader />
+                {children}
+                <AiTutorPanel />
+              </div>
+            </>
+          ) : (
+            // AI Assistant page - full width, no panel
+            <div className="flex-1 flex flex-col min-w-0 w-full">
+              <SiteHeader />
+              {children}
             </div>
           )}
         </div>

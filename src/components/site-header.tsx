@@ -142,11 +142,11 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
                     {index > 0 && <BreadcrumbSeparator />}
                     <BreadcrumbItem>
                       {crumb.href ? (
-                        <BreadcrumbLink href={crumb.href} className="max-w-[200px] truncate">
+                        <BreadcrumbLink href={crumb.href} className="max-w-[120px] sm:max-w-[180px] md:max-w-[250px] lg:max-w-[350px] truncate">
                           {crumb.label}
                         </BreadcrumbLink>
                       ) : (
-                        <BreadcrumbPage className="max-w-[200px] truncate">
+                        <BreadcrumbPage className="max-w-[120px] sm:max-w-[180px] md:max-w-[250px] lg:max-w-[350px] truncate">
                           {crumb.label}
                         </BreadcrumbPage>
                       )}
