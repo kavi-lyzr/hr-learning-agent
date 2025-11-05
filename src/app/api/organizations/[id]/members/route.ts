@@ -130,6 +130,17 @@ export async function POST(
     });
 
     if (existingMember) {
+      // If adding as admin and member already exists with different role, update their role
+      if (role === 'admin' && existingMember.role !== 'admin') {
+        existingMember.role = 'admin';
+        await existingMember.save();
+
+        return NextResponse.json({
+          member: existingMember,
+          message: `${email} role updated to admin`
+        });
+      }
+
       return NextResponse.json(
         { error: `${email} is already a member of this organization` },
         { status: 409 }

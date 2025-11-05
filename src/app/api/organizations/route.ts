@@ -6,6 +6,7 @@ import Department from '@/models/department';
 import User from '@/models/user';
 import { createAgentsForOrganization } from '@/lib/lyzr-services';
 import { decrypt } from '@/lib/encryption';
+import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 
 /**
  * GET /api/organizations

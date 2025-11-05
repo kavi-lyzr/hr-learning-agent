@@ -156,11 +156,24 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
               </BreadcrumbList>
             </Breadcrumb>
           ) : organization ? (
-            <div className="flex flex-col min-w-0">
-              <span className="font-semibold text-base truncate">{organization.name}</span>
-              <p className="text-xs text-muted-foreground">
-                {isAdminView ? 'Admin View' : 'Employee View'}
-              </p>
+            <div className="flex items-center gap-3 min-w-0">
+              {organization.iconUrl && (
+                <img
+                  src={organization.iconUrl}
+                  alt={organization.name}
+                  className="h-8 w-8 rounded-lg object-cover flex-shrink-0"
+                  onError={(e) => {
+                    // Hide image if it fails to load
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-base truncate">{organization.name}</span>
+                <p className="text-xs text-muted-foreground">
+                  {isAdminView ? 'Admin View' : 'Employee View'}
+                </p>
+              </div>
             </div>
           ) : (
             <span className="font-semibold text-base">Lyzr L&D</span>

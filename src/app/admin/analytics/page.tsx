@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import {
@@ -17,15 +18,47 @@ import {
   Target,
 } from "lucide-react";
 
+interface AnalyticsMetrics {
+  totalLearners: number;
+  avgCompletionRate: number;
+  activeCourses: number;
+  learningHours: number;
+}
+
 export default function AdminAnalyticsPage() {
   const router = useRouter();
   const { currentOrganization, isLoading } = useOrganization();
+  const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
   useEffect(() => {
     if (!isLoading && !currentOrganization) {
       router.push('/organizations');
     }
   }, [currentOrganization, isLoading, router]);
+
+  useEffect(() => {
+    if (currentOrganization) {
+      fetchAnalyticsMetrics();
+    }
+  }, [currentOrganization]);
+
+  const fetchAnalyticsMetrics = async () => {
+    if (!currentOrganization) return;
+
+    try {
+      setMetricsLoading(true);
+      const res = await fetch(`/api/organizations/${currentOrganization.id}/analytics`);
+      if (res.ok) {
+        const data = await res.json();
+        setMetrics(data.metrics);
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
 
   if (isLoading || !currentOrganization) {
     return null;
@@ -63,10 +96,19 @@ export default function AdminAnalyticsPage() {
                     <Users className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">124</div>
-                    <p className="text-xs text-green-600 mt-1">
-                      +12% from last month
-                    </p>
+                    {metricsLoading ? (
+                      <>
+                        <Skeleton className="h-8 w-16 mb-2" />
+                        <Skeleton className="h-3 w-24" />
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics?.totalLearners || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Active employees
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -78,10 +120,19 @@ export default function AdminAnalyticsPage() {
                     <Target className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">78%</div>
-                    <p className="text-xs text-green-600 mt-1">
-                      +5% from last month
-                    </p>
+                    {metricsLoading ? (
+                      <>
+                        <Skeleton className="h-8 w-16 mb-2" />
+                        <Skeleton className="h-3 w-24" />
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics?.avgCompletionRate || 0}%</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Across all enrollments
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -93,10 +144,19 @@ export default function AdminAnalyticsPage() {
                     <BookOpen className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">12</div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      2 added this month
-                    </p>
+                    {metricsLoading ? (
+                      <>
+                        <Skeleton className="h-8 w-16 mb-2" />
+                        <Skeleton className="h-3 w-24" />
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics?.activeCourses || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Published courses
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -108,10 +168,19 @@ export default function AdminAnalyticsPage() {
                     <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">1,247</div>
-                    <p className="text-xs text-green-600 mt-1">
-                      +18% from last month
-                    </p>
+                    {metricsLoading ? (
+                      <>
+                        <Skeleton className="h-8 w-16 mb-2" />
+                        <Skeleton className="h-3 w-24" />
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{metrics?.learningHours.toLocaleString() || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Total time spent learning
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </div>

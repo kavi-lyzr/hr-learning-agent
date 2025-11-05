@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Organization from '@/models/organization';
 import OrganizationMember from '@/models/organizationMember';
+import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 
 /**
  * GET /api/organizations/[id]
@@ -30,12 +31,23 @@ export async function GET(
       status: 'active',
     });
 
+    // Convert iconUrl to presigned URL if it's an S3 URL
+    let iconUrl = organization.iconUrl;
+    if (iconUrl && isS3Url(iconUrl)) {
+      try {
+        iconUrl = await getSignedImageUrl(iconUrl);
+      } catch (error) {
+        console.error('Error generating presigned URL for icon:', error);
+        // Keep original URL as fallback
+      }
+    }
+
     return NextResponse.json({
       organization: {
         id: organization._id,
         name: organization.name,
         slug: organization.slug,
-        iconUrl: organization.iconUrl,
+        iconUrl,
         ownerId: organization.ownerId,
         settings: organization.settings,
         memberCount,

@@ -126,7 +126,7 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
     <Sidebar>
       <SidebarHeader className="border-b p-4 max-h-16 h-16">
         <div className="flex items-center gap-2">
-          {organization?.iconUrl ? (
+          {/* {organization?.iconUrl ? (
             <img
               src={organization.iconUrl}
               alt={organization.name}
@@ -134,7 +134,8 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
             />
           ) : (
             <img src="/lyzr.png" alt="Lyzr L&D" className="h-8 w-8 rounded" />
-          )}
+          )} */}
+          <img src="/lyzr.png" alt="Lyzr L&D" className="h-8 w-8 rounded" />
           <div className="flex flex-col">
             <span className="text-sm font-semibold">
               {"Lyzr L&D"}
@@ -283,9 +284,11 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Account Settings</span>
+                <DropdownMenuItem asChild>
+                  <Link href="/account/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Account Settings</span>
+                  </Link>
                 </DropdownMenuItem>
                 {/* <DropdownMenuItem asChild>
                   <button onClick={refreshCredits}>
