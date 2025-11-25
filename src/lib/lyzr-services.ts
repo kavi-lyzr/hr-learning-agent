@@ -23,8 +23,8 @@ import {
 
 // Lyzr API endpoints
 const LYZR_AGENT_BASE_URL = 'https://agent-prod.studio.lyzr.ai';
-const AGENT_CREATION_ENDPOINT = `${LYZR_AGENT_BASE_URL}/v3/agents`;
-const AGENT_UPDATE_ENDPOINT = (agentId: string) => `${LYZR_AGENT_BASE_URL}/v3/agents/${agentId}`;
+const AGENT_CREATION_ENDPOINT = `${LYZR_AGENT_BASE_URL}/v3/agents/`;
+const AGENT_UPDATE_ENDPOINT = (agentId: string) => `${LYZR_AGENT_BASE_URL}/v3/agents/${agentId}/`;
 
 // --- Tool Descriptions ---
 
