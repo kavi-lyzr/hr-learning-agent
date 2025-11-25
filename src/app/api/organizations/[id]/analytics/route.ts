@@ -13,12 +13,12 @@ import mongoose from 'mongoose';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await dbConnect();
-
+  
   try {
-    const organizationId = params.id;
+    const { id: organizationId } = await params;
 
     if (!mongoose.Types.ObjectId.isValid(organizationId)) {
       return NextResponse.json(
