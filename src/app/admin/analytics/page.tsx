@@ -65,200 +65,187 @@ export default function AdminAnalyticsPage() {
   }
 
   return (
-    // <SidebarProvider>
-    //   <div className="flex h-screen w-full">
-    //     <AppSidebar />
-    //     <div className="flex-1 flex flex-col w-full">
-    //       <SiteHeader
-    //         organization={currentOrganization}
-    //         breadcrumbs={[
-    //           { label: currentOrganization.name, href: `/admin/dashboard` },
-    //           { label: 'Analytics' }
-    //         ]}
-    //       />
-          <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20 w-full">
-            <div className="max-w-7xl mx-auto space-y-8 w-full">
-              {/* Page Header */}
-              <div>
-                <h1 className="text-3xl md:text-4xl font-bold">Analytics</h1>
-                <p className="text-muted-foreground mt-2">
-                  Track learning progress and engagement across your organization
+    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20 w-full">
+      <div className="max-w-7xl mx-auto space-y-3 w-full">
+        {/* Page Header */}
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold">Analytics</h1>
+          <p className="text-muted-foreground mt-2">
+            Track learning progress and engagement across your organization
+          </p>
+        </div>
+
+        <div className="relative">
+          <div className="absolute inset-0 z-10 backdrop-blur-xs bg-background/30 rounded-lg flex items-center justify-center">
+            <Card className="max-w-md mx-4">
+              <CardHeader>
+                <CardTitle className="text-center">Premium Analytics</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center space-y-4">
+                <p className="text-muted-foreground">
+                  Get detailed insights into learning patterns, engagement metrics, and ROI tracking with our premium analytics dashboard.
                 </p>
-              </div>
+                <Button size="lg" className="w-full">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Schedule a Demo
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  See how top companies are using Lyzr L&D to transform their learning programs
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-              {/* Overview Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Total Learners
-                    </CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    {metricsLoading ? (
-                      <>
-                        <Skeleton className="h-8 w-16 mb-2" />
-                        <Skeleton className="h-3 w-24" />
-                      </>
-                    ) : (
-                      <>
-                        <div className="text-2xl font-bold">{metrics?.totalLearners || 0}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Active employees
-                        </p>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+          {/* Overview Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 my-2">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Total Learners
+                </CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <>
+                    <Skeleton className="h-8 w-16 mb-2" />
+                    <Skeleton className="h-3 w-24" />
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.totalLearners || 0}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Active employees
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Avg. Completion Rate
-                    </CardTitle>
-                    <Target className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    {metricsLoading ? (
-                      <>
-                        <Skeleton className="h-8 w-16 mb-2" />
-                        <Skeleton className="h-3 w-24" />
-                      </>
-                    ) : (
-                      <>
-                        <div className="text-2xl font-bold">{metrics?.avgCompletionRate || 0}%</div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Across all enrollments
-                        </p>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Avg. Completion Rate
+                </CardTitle>
+                <Target className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <>
+                    <Skeleton className="h-8 w-16 mb-2" />
+                    <Skeleton className="h-3 w-24" />
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.avgCompletionRate || 0}%</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Across all enrollments
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Active Courses
-                    </CardTitle>
-                    <BookOpen className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    {metricsLoading ? (
-                      <>
-                        <Skeleton className="h-8 w-16 mb-2" />
-                        <Skeleton className="h-3 w-24" />
-                      </>
-                    ) : (
-                      <>
-                        <div className="text-2xl font-bold">{metrics?.activeCourses || 0}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Published courses
-                        </p>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Active Courses
+                </CardTitle>
+                <BookOpen className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <>
+                    <Skeleton className="h-8 w-16 mb-2" />
+                    <Skeleton className="h-3 w-24" />
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.activeCourses || 0}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Published courses
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                      Learning Hours
-                    </CardTitle>
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    {metricsLoading ? (
-                      <>
-                        <Skeleton className="h-8 w-16 mb-2" />
-                        <Skeleton className="h-3 w-24" />
-                      </>
-                    ) : (
-                      <>
-                        <div className="text-2xl font-bold">{metrics?.learningHours.toLocaleString() || 0}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Total time spent learning
-                        </p>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Learning Hours
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {metricsLoading ? (
+                  <>
+                    <Skeleton className="h-8 w-16 mb-2" />
+                    <Skeleton className="h-3 w-24" />
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{metrics?.learningHours.toLocaleString() || 0}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total time spent learning
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-              {/* Blurred Charts for Demo - Sales Tool */}
-              <div className="relative">
-                {/* Blur Overlay */}
-                <div className="absolute inset-0 z-10 backdrop-blur-md bg-background/30 rounded-lg flex items-center justify-center">
-                  <Card className="max-w-md mx-4">
-                    <CardHeader>
-                      <CardTitle className="text-center">Premium Analytics</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-center space-y-4">
-                      <p className="text-muted-foreground">
-                        Get detailed insights into learning patterns, engagement metrics, and ROI tracking with our premium analytics dashboard.
-                      </p>
-                      <Button size="lg" className="w-full">
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Schedule a Demo
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        See how top companies are using Lyzr L&D to transform their learning programs
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
+          {/* Blurred Charts for Demo - Sales Tool */}
+          <div className="relative">
+            {/* Ghosted Charts */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-50">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Course Completion Trends</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-42 flex items-center justify-center bg-muted/50 rounded-lg">
+                    <BarChart3 className="h-16 w-16 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
 
-                {/* Ghosted Charts */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-50">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Course Completion Trends</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-64 flex items-center justify-center bg-muted/50 rounded-lg">
-                        <BarChart3 className="h-16 w-16 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Engagement by Department</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-42 flex items-center justify-center bg-muted/50 rounded-lg">
+                    <Users className="h-16 w-16 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Engagement by Department</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-64 flex items-center justify-center bg-muted/50 rounded-lg">
-                        <Users className="h-16 w-16 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Learning Hours Over Time</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-42 flex items-center justify-center bg-muted/50 rounded-lg">
+                    <TrendingUp className="h-16 w-16 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Learning Hours Over Time</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-64 flex items-center justify-center bg-muted/50 rounded-lg">
-                        <TrendingUp className="h-16 w-16 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Top Performing Courses</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-64 flex items-center justify-center bg-muted/50 rounded-lg">
-                        <BookOpen className="h-16 w-16 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Top Performing Courses</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-42 flex items-center justify-center bg-muted/50 rounded-lg">
+                    <BookOpen className="h-16 w-16 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </main>
-    //     </div>
-    //   </div>
-    // </SidebarProvider>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
