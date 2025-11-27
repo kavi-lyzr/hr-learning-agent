@@ -36,6 +36,13 @@ const getEmailConfig = (): EmailConfig => {
   };
 };
 
+// Get sender email configuration
+const getSenderConfig = () => {
+  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || '';
+
+  return { fromEmail };
+};
+
 // Create reusable transporter
 const createTransporter = () => {
   try {
@@ -84,7 +91,7 @@ const generateCourseAssignmentEmail = (data: CourseAssignmentEmailData) => {
       border-radius: 4px;
     }
     .header {
-      background-color: #9031ad;
+      background-color: #811cd4;
       padding: 20px;
       margin: -40px -40px 30px -40px;
     }
@@ -223,16 +230,12 @@ export const sendCourseAssignmentEmail = async (
   try {
     console.log(`📧 Preparing to send email to: ${user.email}`);
     console.log(`📚 Course: ${course.title}`);
-    
+
     const transporter = createTransporter();
-    
+
     if (!transporter) {
       console.error('❌ Email transporter not configured. Skipping email notification.');
       console.error('💡 Please configure SMTP settings in your .env file:');
-      console.error('   - SMTP_HOST');
-      console.error('   - SMTP_PORT');
-      console.error('   - SMTP_USER');
-      console.error('   - SMTP_PASSWORD');
       return false;
     }
 
@@ -247,9 +250,9 @@ export const sendCourseAssignmentEmail = async (
 
     const { html, text } = generateCourseAssignmentEmail(emailData);
 
-    const fromEmail = process.env.SMTP_USER;
-    const fromName = 'Lyzr L&D';
-    
+    const { fromEmail } = getSenderConfig();
+    const fromName = "Lyzr L&D";
+
     const mailOptions = {
       from: `"${fromName}" <${fromEmail}>`,
       to: user.email,
@@ -260,7 +263,7 @@ export const sendCourseAssignmentEmail = async (
 
     console.log(`📤 Sending email from: ${fromName} <${fromEmail}>`);
     console.log(`📬 Sending email to: ${user.email}`);
-    
+
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Course assignment email sent successfully!`);
     console.log(`📨 Message ID: ${info.messageId}`);
@@ -278,21 +281,3 @@ export const sendCourseAssignmentEmail = async (
   }
 };
 
-// Test email configuration
-export const testEmailConfiguration = async (): Promise<boolean> => {
-  try {
-    const transporter = createTransporter();
-    
-    if (!transporter) {
-      console.error('Email transporter not configured.');
-      return false;
-    }
-
-    await transporter.verify();
-    console.log('✅ Email configuration is valid');
-    return true;
-  } catch (error) {
-    console.error('❌ Email configuration test failed:', error);
-    return false;
-  }
-};
