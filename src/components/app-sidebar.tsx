@@ -104,8 +104,8 @@ interface AppSidebarProps {
   };
 }
 
-export function AppSidebar({ role = "admin", user, organization }: AppSidebarProps) {
-  const { credits, totalCredits, usedCredits, refreshCredits } = useAuth();
+export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
+  const { credits, totalCredits, usedCredits, refreshCredits, logout } = useAuth();
   const navItems = role === "admin" ? adminNavItems : employeeNavItems;
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -120,6 +120,10 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
     } finally {
       setIsRefreshing(false);
     }
+  };
+
+  const handleLogout = async () => {
+    await logout();
   };
 
   return (
@@ -296,7 +300,7 @@ export function AppSidebar({ role = "admin", user, organization }: AppSidebarPro
                     Refresh Credits
                   </button>
                 </DropdownMenuItem> */}
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
                 </DropdownMenuItem>
