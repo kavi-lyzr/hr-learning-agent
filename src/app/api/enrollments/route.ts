@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       query.organizationId = new mongoose.Types.ObjectId(organizationId);
     }
 
-    console.log('🔍 Querying enrollments:', { userId: user._id.toString(), organizationId });
+    // console.log('🔍 Querying enrollments:', { userId: user._id.toString(), organizationId });
 
     // Get enrollments with course details
     const enrollments = await Enrollment.find(query)

@@ -82,6 +82,8 @@ export default function LessonEditorPage() {
   const [contentPrompt, setContentPrompt] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [rteKey, setRteKey] = useState(0); // Key to force RTE re-render
+  const [quizConfigOpen, setQuizConfigOpen] = useState(false);
+  const [numQuestions, setNumQuestions] = useState(5);
 
   const [formData, setFormData] = useState<LessonFormData>({
     title: '',
@@ -880,8 +882,8 @@ export default function LessonEditorPage() {
                       </p>
                       <div className="flex items-center justify-center gap-2">
                         <Button
-                          onClick={() => handleGenerateQuiz(3)}
-                          disabled={generatingQuiz}
+                          onClick={() => setQuizConfigOpen(true)}
+                          disabled={generatingQuiz || (!formData.articleHtml && !formData.transcript.length)}
                           size="lg"
                         >
                           {generatingQuiz ? (
@@ -892,23 +894,8 @@ export default function LessonEditorPage() {
                           ) : (
                             <>
                               <Wand2 className="h-4 w-4 mr-2" />
-                              Generate 3 Questions
+                              Generate Quiz Questions
                             </>
-                          )}
-                        </Button>
-                        <Button
-                          onClick={() => handleGenerateQuiz(5)}
-                          disabled={generatingQuiz}
-                          variant="outline"
-                          size="lg"
-                        >
-                          {generatingQuiz ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Generating...
-                            </>
-                          ) : (
-                            'Generate 5 Questions'
                           )}
                         </Button>
                       </div>
@@ -932,7 +919,7 @@ export default function LessonEditorPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
-                          onClick={() => handleGenerateQuiz(formData.quizData!.questions.length)}
+                          onClick={() => setQuizConfigOpen(true)}
                           disabled={generatingQuiz}
                           variant="outline"
                           size="sm"
@@ -1161,6 +1148,66 @@ export default function LessonEditorPage() {
               <Button onClick={handleSaveTranscript}>
                 <Save className="h-4 w-4 mr-2" />
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Quiz Configuration Dialog */}
+        <Dialog open={quizConfigOpen} onOpenChange={setQuizConfigOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Configure Quiz Generation</DialogTitle>
+              <DialogDescription>
+                Choose how many questions you want the AI to generate (2-20 questions).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="numQuestions">Number of Questions: {numQuestions}</Label>
+                <Input
+                  id="numQuestions"
+                  type="range"
+                  min={2}
+                  max={20}
+                  value={numQuestions}
+                  onChange={(e) => setNumQuestions(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>2</span>
+                  <span>20</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose between 2 and 20 questions. More questions = better assessment but longer quiz.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setQuizConfigOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setQuizConfigOpen(false);
+                  handleGenerateQuiz(numQuestions);
+                }}
+                disabled={generatingQuiz}
+              >
+                {generatingQuiz ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    Generate {numQuestions} Questions
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

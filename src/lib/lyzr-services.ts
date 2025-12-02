@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Lyzr Agent Services for L&D Platform
  *
@@ -24,7 +26,7 @@ import {
 // Lyzr API endpoints
 const LYZR_AGENT_BASE_URL = 'https://agent-prod.studio.lyzr.ai';
 const AGENT_CREATION_ENDPOINT = `${LYZR_AGENT_BASE_URL}/v3/agents/`;
-const AGENT_UPDATE_ENDPOINT = (agentId: string) => `${LYZR_AGENT_BASE_URL}/v3/agents/${agentId}/`;
+const AGENT_UPDATE_ENDPOINT = (agentId: string) => `${LYZR_AGENT_BASE_URL}/v3/agents/${agentId}`;
 
 // --- Tool Descriptions ---
 
@@ -70,13 +72,16 @@ async function createLyzrAgent(apiKey: string, agentConfig: any, organizationNam
         persist_auth: false
     })) : [];
 
-    const payload = {
+    const payload: any = {
         ...configPayload,
         name: agentName,
-        tools: toolIds || [], // Array of tool names
-        tool_configs: toolConfigs, // Detailed tool configuration with descriptions
         store_messages: true, // Enable message storage for conversation history
     };
+
+    // Only add tool_configs if tools are actually provided (don't send empty array or field at all)
+    if (toolConfigs.length > 0) {
+        payload.tool_configs = toolConfigs;
+    }
 
     console.log(`Creating ${agentType} agent: ${agentName}`);
     if (toolIds && toolIds.length > 0) {
@@ -124,12 +129,16 @@ async function updateLyzrAgent(apiKey: string, agentId: string, agentConfig: any
         persist_auth: false
     })) : undefined;
 
-    const payload = {
+    const payload: any = {
         ...configPayload,
         name: agentName,
         store_messages: true,
-        ...(toolIds && { tools: toolIds, tool_configs: toolConfigs }),
     };
+
+    // Only add tool_configs if tools are provided
+    if (toolConfigs && toolConfigs.length > 0) {
+        payload.tool_configs = toolConfigs;
+    }
 
     console.log(`Updating ${agentType} agent: ${agentId} with name: ${agentName}`);
 

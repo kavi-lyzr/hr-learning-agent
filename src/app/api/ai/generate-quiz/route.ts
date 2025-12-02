@@ -38,11 +38,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate numQuestions
-    if (numQuestions < 3 || numQuestions > 5) {
+    if (numQuestions < 2 || numQuestions > 20) {
       return NextResponse.json(
         {
           error: 'Invalid numQuestions',
-          details: 'numQuestions must be between 3 and 5',
+          details: 'numQuestions must be between 2 and 20',
         },
         { status: 400 }
       );

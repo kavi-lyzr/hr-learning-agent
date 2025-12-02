@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
-import { Bot, Send, User, Minimize2, Maximize2, BookOpen, GraduationCap } from "lucide-react";
+import { Bot, Send, User, Minimize2, BookOpen, GraduationCap } from "lucide-react";
+import { Streamdown } from "streamdown";
 
 interface Message {
   id: string;
@@ -254,42 +255,116 @@ export function AiTutorPanel() {
       {/* Messages */}
       <ScrollArea className="flex-1 p-4 overflow-y-auto">
         <div className="space-y-4 pb-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              {message.role === 'assistant' && (
-                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-3 w-3 text-primary" />
-                </div>
-              )}
+          {messages.map((message, index) => {
+            const isLastMessage = index === messages.length - 1;
+            const isStreaming = isLastMessage && isSending && message.role === 'assistant';
+
+            return (
               <div
-                className={`rounded-lg px-3 py-2 max-w-[85%] ${
-                  message.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted'
-                }`}
+                key={message.id}
+                className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                <p className={`text-xs mt-1 ${
-                  message.role === 'user'
-                    ? 'text-primary-foreground/60'
-                    : 'text-muted-foreground'
-                }`}>
-                  {message.timestamp.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
-              </div>
-              {message.role === 'user' && (
-                <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                  <User className="h-3 w-3" />
+                {message.role === 'assistant' && (
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Bot className="h-3 w-3 text-primary" />
+                  </div>
+                )}
+                <div
+                  className={`rounded-lg px-3 py-2 max-w-[85%] ${message.role === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted'
+                    }`}
+                >
+                  <div className="text-sm">
+                    {message.role === 'assistant' ? (
+                      <Streamdown
+                        parseIncompleteMarkdown={true}
+                        isAnimating={isStreaming}
+                        components={{
+                          a: ({ ...props }) => (
+                            <a
+                              {...props}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-blue-600/50 dark:decoration-blue-400/50 underline-offset-4 transition-colors"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {props.children}
+                              <span className="inline-block ml-1 align-middle">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                </svg>
+                              </span>
+                            </a>
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </Streamdown>
+                    ) : (
+                      <Streamdown
+                        parseIncompleteMarkdown={true}
+                        components={{
+                          a: ({ ...props }) => (
+                            <a
+                              {...props}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-blue-600/50 dark:decoration-blue-400/50 underline-offset-4 transition-colors"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {props.children}
+                              <span className="inline-block ml-1 align-middle">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                </svg>
+                              </span>
+                            </a>
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </Streamdown>
+                    )}
+                  </div>
+                  <p className={`text-xs mt-1 ${message.role === 'user'
+                      ? 'text-primary-foreground/60'
+                      : 'text-muted-foreground'
+                    }`}>
+                    {message.timestamp.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
                 </div>
-              )}
-            </div>
-          ))}
+                {message.role === 'user' && (
+                  <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <User className="h-3 w-3" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {isSending && (
             <div className="flex gap-2 justify-start">
               <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
