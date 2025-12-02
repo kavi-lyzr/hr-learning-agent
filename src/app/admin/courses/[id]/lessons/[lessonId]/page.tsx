@@ -210,11 +210,19 @@ export default function LessonEditorPage() {
       }
 
       const data = await response.json();
-      setFormData({ ...formData, transcript: data.transcript });
+
+      // Normalize transcript format (new API returns string, old library returns array)
+      let normalizedTranscript = data.transcript;
+      if (typeof data.transcript === 'string') {
+        // Convert string to array format for backward compatibility
+        normalizedTranscript = [{ text: data.transcript, start: 0, duration: 0 }];
+      }
+
+      setFormData({ ...formData, transcript: normalizedTranscript });
       setHasChanges(true);
       toast.success('Transcript fetched successfully!');
       // Open the transcript editor automatically
-      handleOpenTranscriptEditor(data.transcript);
+      handleOpenTranscriptEditor(normalizedTranscript);
     } catch (error: any) {
       console.error('Error fetching transcript:', error);
       toast.error(error.message || 'Failed to fetch transcript');

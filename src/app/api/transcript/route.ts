@@ -26,6 +26,86 @@ function extractVideoId(url: string): string | null {
 	return null;
 }
 
+/**
+ * Construct YouTube URL from video ID
+ */
+function constructYouTubeUrl(videoId: string): string {
+	return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+/**
+ * Fetch transcript using the new FastAPI service (primary method)
+ */
+async function fetchTranscriptFromApi(videoUrl: string): Promise<{
+	videoId: string;
+	transcript: string;
+	cached: boolean;
+	language: string;
+} | null> {
+	const apiUrl = process.env.YOUTUBE_TRANSCRIPT_API_URL;
+	const apiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY;
+
+	if (!apiUrl || !apiKey) {
+		console.warn("YouTube Transcript API credentials not configured, will use fallback method");
+		return null;
+	}
+
+	try {
+		const response = await fetch(`${apiUrl}/api/v1/youtube/transcript`, {
+			method: 'POST',
+			headers: {
+				'X-API-KEY': apiKey,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ url: videoUrl }),
+		});
+
+		if (!response.ok) {
+			if (response.status === 404) {
+				const errorData = await response.json();
+				throw new Error(errorData.detail || "Transcript not found for this video");
+			}
+			throw new Error(`API returned status ${response.status}`);
+		}
+
+		const data = await response.json();
+		return {
+			videoId: data.video_id,
+			transcript: data.transcript,
+			cached: data.cached,
+			language: data.language,
+		};
+	} catch (error) {
+		console.error("Error fetching from FastAPI service:", error);
+		return null;
+	}
+}
+
+/**
+ * Fetch transcript using the old library (fallback method)
+ */
+async function fetchTranscriptFromLibrary(videoId: string): Promise<{
+	videoId: string;
+	transcript: any[];
+} | null> {
+	try {
+		const api = new YouTubeTranscriptApi();
+		const transcript = await api.fetch(videoId);
+
+		return {
+			videoId: transcript.videoId,
+			transcript: transcript.snippets.map((snippet: any) => ({
+				text: snippet.text,
+				start: snippet.start,
+				duration: snippet.duration,
+			})),
+		};
+	} catch (error) {
+		console.error("Error fetching from library:", error);
+		return null;
+	}
+}
+
 export async function GET(request: NextRequest) {
 	try {
 		const searchParams = request.nextUrl.searchParams;
@@ -38,17 +118,37 @@ export async function GET(request: NextRequest) {
 			);
 		}
 
-		const api = new YouTubeTranscriptApi();
-		const transcript = await api.fetch(videoId);
+		// Construct YouTube URL from video ID
+		const videoUrl = constructYouTubeUrl(videoId);
 
-		return NextResponse.json({
-			videoId: transcript.videoId,
-			transcript: transcript.snippets.map((snippet: any) => ({
-				text: snippet.text,
-				start: snippet.start,
-				duration: snippet.duration,
-			})),
-		});
+		// Try the new FastAPI service first
+		const apiResult = await fetchTranscriptFromApi(videoUrl);
+		if (apiResult) {
+			return NextResponse.json({
+				videoId: apiResult.videoId,
+				transcript: apiResult.transcript,
+				cached: apiResult.cached,
+				language: apiResult.language,
+				source: 'api',
+			});
+		}
+
+		// Fallback to the old library
+		console.log("Falling back to library method for video:", videoId);
+		const libraryResult = await fetchTranscriptFromLibrary(videoId);
+		if (libraryResult) {
+			return NextResponse.json({
+				videoId: libraryResult.videoId,
+				transcript: libraryResult.transcript,
+				source: 'library',
+			});
+		}
+
+		// Both methods failed
+		return NextResponse.json(
+			{ error: "Failed to fetch transcript from both API and library" },
+			{ status: 500 }
+		);
 	} catch (error) {
 		console.error("Error fetching transcript:", error);
 		return NextResponse.json(
@@ -81,17 +181,34 @@ export async function POST(request: NextRequest) {
 			);
 		}
 
-		const api = new YouTubeTranscriptApi();
-		const transcript = await api.fetch(videoId);
+		// Try the new FastAPI service first
+		const apiResult = await fetchTranscriptFromApi(videoUrl);
+		if (apiResult) {
+			return NextResponse.json({
+				videoId: apiResult.videoId,
+				transcript: apiResult.transcript,
+				cached: apiResult.cached,
+				language: apiResult.language,
+				source: 'api',
+			});
+		}
 
-		return NextResponse.json({
-			videoId: transcript.videoId,
-			transcript: transcript.snippets.map((snippet: any) => ({
-				text: snippet.text,
-				start: snippet.start,
-				duration: snippet.duration,
-			})),
-		});
+		// Fallback to the old library
+		console.log("Falling back to library method for video:", videoId);
+		const libraryResult = await fetchTranscriptFromLibrary(videoId);
+		if (libraryResult) {
+			return NextResponse.json({
+				videoId: libraryResult.videoId,
+				transcript: libraryResult.transcript,
+				source: 'library',
+			});
+		}
+
+		// Both methods failed
+		return NextResponse.json(
+			{ error: "Failed to fetch transcript from both API and library" },
+			{ status: 500 }
+		);
 	} catch (error) {
 		console.error("Error fetching transcript:", error);
 		return NextResponse.json(
