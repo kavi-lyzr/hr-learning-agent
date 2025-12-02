@@ -3,8 +3,10 @@ import dbConnect from '@/lib/db';
 import Enrollment from '@/models/enrollment';
 import Course from '@/models/course';
 import User from '@/models/user';
+import Organization from '@/models/organization';
 import mongoose from 'mongoose';
 import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
+import { sendCourseAssignmentEmail } from '@/lib/email-service';
 
 /**
  * GET /api/enrollments?userId=xxx&organizationId=xxx
@@ -190,11 +192,29 @@ export async function POST(request: NextRequest) {
     // Populate course details
     await enrollment.populate('courseId', 'title description category thumbnailUrl estimatedDuration');
 
+    // Get organization details for email
+    const organization = await Organization.findById(organizationId);
+    
+    // Send course assignment email notification
+    try {
+      const courseLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/employee/courses/${courseId}`;
+      await sendCourseAssignmentEmail(
+        user,
+        course,
+        courseLink,
+        organization?.name
+      );
+      console.log(`📧 Course assignment email sent to ${user.email}`);
+    } catch (emailError) {
+      console.error('Failed to send course assignment email:', emailError instanceof Error ? emailError.message : 'Unknown error');
+      // Don't fail the enrollment if email fails
+    }
+
     return NextResponse.json({ enrollment }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating enrollment:', error);
     return NextResponse.json(
-      { error: 'Internal Server Error', details: error.message },
+      { error: 'Internal Server Error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
