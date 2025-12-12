@@ -1,39 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { useOrganization } from "@/lib/OrganizationProvider";
+import { useDashboardStats, useOrganizationActivity } from "@/hooks/use-queries";
 import {
   BookOpen,
   Users,
-  GraduationCap,
-  TrendingUp,
-  Plus,
   BarChart3,
   Layers,
   FileText,
-  UserPlus,
 } from "lucide-react";
-
-interface DashboardStats {
-  totalCourses: number;
-  publishedCourses: number;
-  totalModules: number;
-  totalLessons: number;
-  totalMembers: number;
-  activeMembers: number;
-}
 
 interface ActivityEvent {
   id: string;
@@ -55,88 +34,24 @@ interface ActivityEvent {
 export default function AdminDashboard() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [activities, setActivities] = useState<ActivityEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activitiesLoading, setActivitiesLoading] = useState(true);
+  
+  // Use React Query hooks for data fetching with caching
+  const { 
+    data: stats, 
+    isLoading: statsLoading,
+    isError: statsError 
+  } = useDashboardStats(currentOrganization?.id || null);
+  
+  const { 
+    data: activities = [], 
+    isLoading: activitiesLoading 
+  } = useOrganizationActivity(currentOrganization?.id || null);
 
-  useEffect(() => {
-    if (currentOrganization) {
-      fetchDashboardStats();
-      fetchRecentActivity();
-    }
-  }, [currentOrganization]);
-
-  const fetchDashboardStats = async () => {
-    if (!currentOrganization) return;
-
-    try {
-      setLoading(true);
-
-      // Fetch courses
-      const coursesRes = await fetch(`/api/courses?organizationId=${currentOrganization.id}`);
-      const coursesData = await coursesRes.json();
-      const courses = coursesData.courses || [];
-
-      // Calculate stats from courses
-      const totalCourses = courses.length;
-      const publishedCourses = courses.filter((c: any) => c.status === 'published').length;
-      const totalModules = courses.reduce((sum: number, c: any) => sum + (c.totalModules || 0), 0);
-      const totalLessons = courses.reduce((sum: number, c: any) => sum + (c.totalLessons || 0), 0);
-
-      // Fetch organization members
-      const membersRes = await fetch(`/api/organizations/${currentOrganization.id}/members`);
-      const membersData = await membersRes.json();
-      const members = membersData.members || [];
-
-      const totalMembers = members.length;
-      const activeMembers = members.filter((m: any) => m.status === 'active').length;
-
-      setStats({
-        totalCourses,
-        publishedCourses,
-        totalModules,
-        totalLessons,
-        totalMembers,
-        activeMembers,
-      });
-    } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
-      // Set default stats on error
-      setStats({
-        totalCourses: 0,
-        publishedCourses: 0,
-        totalModules: 0,
-        totalLessons: 0,
-        totalMembers: 0,
-        activeMembers: 0,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRecentActivity = async () => {
-    if (!currentOrganization) return;
-
-    try {
-      setActivitiesLoading(true);
-      const res = await fetch(`/api/organizations/${currentOrganization.id}/activity?limit=10`);
-      if (res.ok) {
-        const data = await res.json();
-        // Convert timestamp strings to Date objects
-        const activitiesWithDates = data.activities.map((activity: any) => ({
-          ...activity,
-          timestamp: new Date(activity.timestamp),
-        }));
-        setActivities(activitiesWithDates);
-      }
-    } catch (error) {
-      console.error('Error fetching recent activity:', error);
-    } finally {
-      setActivitiesLoading(false);
-    }
-  };
+  // Transform activities to have proper Date objects
+  const formattedActivities = activities.map((activity: ActivityEvent) => ({
+    ...activity,
+    timestamp: new Date(activity.timestamp),
+  }));
 
   const getActivityDescription = (activity: ActivityEvent) => {
     switch (activity.type) {
@@ -200,7 +115,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats Cards */}
-        {loading ? (
+        {statsLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[1, 2, 3, 4].map((i) => (
               <Card key={i}>
@@ -309,7 +224,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </>
-              ) : activities.length === 0 ? (
+              ) : formattedActivities.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-muted-foreground">No recent activity</p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -317,7 +232,7 @@ export default function AdminDashboard() {
                   </p>
                 </div>
               ) : (
-                activities.slice(0, 5).map((activity) => {
+                formattedActivities.slice(0, 5).map((activity) => {
                   const { title, description, color } = getActivityDescription(activity);
                   return (
                     <div key={activity.id} className="flex items-center gap-4">

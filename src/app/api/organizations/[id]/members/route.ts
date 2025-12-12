@@ -4,6 +4,7 @@ import OrganizationMember from '@/models/organizationMember';
 import Department from '@/models/department';
 import Enrollment from '@/models/enrollment';
 import mongoose from 'mongoose';
+import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 
 /**
  * GET /api/organizations/[id]/members
@@ -31,9 +32,19 @@ export async function GET(
       .sort({ createdAt: -1 })
       .lean();
 
-    // Get enrollment counts for each member
+    // Get enrollment counts for each member and sign avatar URLs
     const membersWithStats = await Promise.all(
       members.map(async (member: any) => {
+        // Sign avatar URL if present
+        let signedAvatarUrl = member.userId?.avatarUrl;
+        if (signedAvatarUrl && isS3Url(signedAvatarUrl)) {
+          try {
+            signedAvatarUrl = await getSignedImageUrl(signedAvatarUrl);
+          } catch (error) {
+            console.error('Error signing avatar URL:', error);
+          }
+        }
+
         // Calculate enrollments for any member with a userId (both employees and admins)
         if (member.userId) {
           // member.userId is populated, so we need to use the _id
@@ -55,6 +66,10 @@ export async function GET(
 
           return {
             ...member,
+            userId: {
+              ...member.userId,
+              avatarUrl: signedAvatarUrl,
+            },
             coursesEnrolled: enrollments.length,
             coursesCompleted: completed,
             coursesInProgress: inProgress,
@@ -185,7 +200,7 @@ export async function POST(
 
     // Determine which courses to enroll
     let coursesToEnroll: string[] = [];
-    
+
     if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
       // Use provided course IDs
       coursesToEnroll = courseIds;
@@ -221,6 +236,81 @@ export async function POST(
       );
     }
 
+    return NextResponse.json(
+      { error: 'Internal Server Error', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/organizations/[id]/members
+ * Remove a member from an organization
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  await dbConnect();
+
+  try {
+    const { id: organizationId } = await params;
+    const body = await request.json();
+    const { email, memberId } = body;
+
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      return NextResponse.json(
+        { error: 'Invalid organization ID' },
+        { status: 400 }
+      );
+    }
+
+    let member;
+
+    if (memberId) {
+      // Find by member ID
+      if (!mongoose.Types.ObjectId.isValid(memberId)) {
+        return NextResponse.json(
+          { error: 'Invalid member ID' },
+          { status: 400 }
+        );
+      }
+      member = await OrganizationMember.findOne({
+        _id: memberId,
+        organizationId
+      });
+    } else if (email) {
+      // Find by email
+      member = await OrganizationMember.findOne({
+        email: email.toLowerCase(),
+        organizationId
+      });
+    } else {
+      return NextResponse.json(
+        { error: 'Either email or memberId is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!member) {
+      return NextResponse.json(
+        { error: 'Member not found in this organization' },
+        { status: 404 }
+      );
+    }
+
+    // Delete the member
+    await OrganizationMember.deleteOne({ _id: member._id });
+
+    // Optionally: Delete related enrollments if you want
+    // await Enrollment.deleteMany({ userId: member.userId, organizationId });
+
+    return NextResponse.json({
+      success: true,
+      message: `Member ${member.email} removed from organization`
+    });
+  } catch (error: any) {
+    console.error('Error removing member:', error);
     return NextResponse.json(
       { error: 'Internal Server Error', details: error.message },
       { status: 500 }

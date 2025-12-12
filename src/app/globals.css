@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@source "../../node_modules/streamdown/dist/index.js";
+@source "../../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -274,6 +274,21 @@ body {
   animation: grid-flow 20s ease-in-out infinite;
 }
 
+/* Staggered card animations */
+.animate-card-enter {
+  animation: fade-in-up 0.4s ease-out backwards;
+}
+
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+.stagger-9 { animation-delay: 0.45s; }
+
 /* Subtle Grid Pattern */
 .bg-grid-pattern {
   background-image: 
@@ -444,4 +459,197 @@ body.no-gradient-background {
 
 ::selection {
   @apply bg-primary text-primary-foreground;
+}
+
+/* TipTap Editor Styles */
+.tiptap-heading {
+  @apply font-semibold my-4;
+}
+
+.tiptap h1,
+.ProseMirror h1 {
+  @apply text-3xl font-bold my-6;
+}
+
+.tiptap h2,
+.ProseMirror h2 {
+  @apply text-2xl font-bold my-5;
+}
+
+.tiptap h3,
+.ProseMirror h3 {
+  @apply text-xl font-semibold my-4;
+}
+
+.tiptap h4,
+.ProseMirror h4 {
+  @apply text-lg font-semibold my-3;
+}
+
+.tiptap h5,
+.ProseMirror h5 {
+  @apply text-base font-semibold my-3;
+}
+
+.tiptap h6,
+.ProseMirror h6 {
+  @apply text-sm font-semibold my-2;
+}
+
+.ProseMirror {
+  @apply p-4 outline-none min-h-[200px];
+}
+
+.ProseMirror p {
+  @apply my-3 leading-relaxed;
+}
+
+.ProseMirror ul {
+  @apply list-disc pl-6 my-4;
+}
+
+.ProseMirror ol {
+  @apply list-decimal pl-6 my-4;
+}
+
+.ProseMirror li {
+  @apply my-1;
+}
+
+.ProseMirror li p {
+  @apply my-0;
+}
+
+.ProseMirror blockquote {
+  @apply border-l-4 border-primary pl-4 my-4 italic text-muted-foreground;
+}
+
+.ProseMirror pre {
+  @apply bg-zinc-900 text-zinc-100 p-4 rounded-lg my-4 font-mono text-sm overflow-x-auto;
+}
+
+.ProseMirror code {
+  @apply bg-muted px-1.5 py-0.5 rounded font-mono text-sm;
+}
+
+.ProseMirror pre code {
+  @apply bg-transparent p-0;
+}
+
+.ProseMirror hr {
+  @apply my-6 border-border;
+}
+
+.ProseMirror img {
+  @apply max-w-full h-auto rounded-lg my-4;
+}
+
+.ProseMirror a {
+  @apply text-primary underline hover:text-primary/80;
+}
+
+/* TipTap Table Styles */
+.ProseMirror table {
+  @apply border-collapse border border-border my-4 w-full;
+}
+
+.ProseMirror th {
+  @apply border border-border bg-muted px-4 py-2 text-left font-semibold;
+}
+
+.ProseMirror td {
+  @apply border border-border px-4 py-2;
+}
+
+.ProseMirror .selectedCell {
+  @apply bg-primary/10;
+}
+
+/* Prose Content Styles for Employee View */
+.prose h1 {
+  @apply text-3xl font-bold my-6;
+}
+
+.prose h2 {
+  @apply text-2xl font-bold my-5;
+}
+
+.prose h3 {
+  @apply text-xl font-semibold my-4;
+}
+
+.prose h4 {
+  @apply text-lg font-semibold my-3;
+}
+
+.prose h5 {
+  @apply text-base font-semibold my-3;
+}
+
+.prose h6 {
+  @apply text-sm font-semibold my-2;
+}
+
+.prose p {
+  @apply my-3 leading-relaxed;
+}
+
+.prose ul {
+  @apply list-disc pl-6 my-4;
+}
+
+.prose ol {
+  @apply list-decimal pl-6 my-4;
+}
+
+.prose li {
+  @apply my-1;
+}
+
+.prose blockquote {
+  @apply border-l-4 border-primary pl-4 my-4 italic text-muted-foreground;
+}
+
+.prose pre {
+  @apply bg-zinc-900 text-zinc-100 p-4 rounded-lg my-4 font-mono text-sm overflow-x-auto;
+}
+
+.prose code {
+  @apply bg-muted px-1.5 py-0.5 rounded font-mono text-sm;
+}
+
+.prose pre code {
+  @apply bg-transparent p-0;
+}
+
+.prose hr {
+  @apply my-6 border-border;
+}
+
+.prose img {
+  @apply max-w-full h-auto rounded-lg my-4;
+}
+
+.prose a {
+  @apply text-primary underline hover:text-primary/80;
+}
+
+.prose table {
+  @apply border-collapse border border-border my-4 w-full;
+}
+
+.prose th {
+  @apply border border-border bg-muted px-4 py-2 text-left font-semibold;
+}
+
+.prose td {
+  @apply border border-border px-4 py-2;
+}
+
+.prose strong {
+  @apply font-semibold;
+}
+
+.prose em {
+  @apply italic;
 }

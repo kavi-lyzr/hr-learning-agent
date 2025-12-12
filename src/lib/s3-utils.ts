@@ -5,15 +5,19 @@
 
 /**
  * Extract S3 key from full S3 URL
- * @param url - Full S3 URL
+ * Strips any query parameters (including signature params) before extracting key
+ * @param url - Full S3 URL (may include query params)
  * @returns S3 key (path within bucket)
  */
 export function extractS3Key(url: string): string | null {
 	try {
+		// First, strip any query parameters
+		const urlWithoutParams = url.split('?')[0];
+		
 		// Pattern: https://bucket-name.s3.region.amazonaws.com/key
 		const s3Pattern = /https:\/\/[^/]+\.s3\.[^/]+\.amazonaws\.com\/(.+)/;
-		const match = url.match(s3Pattern);
-		return match ? match[1] : null;
+		const match = urlWithoutParams.match(s3Pattern);
+		return match ? decodeURIComponent(match[1]) : null;
 	} catch (error) {
 		console.error("Error extracting S3 key:", error);
 		return null;
@@ -21,17 +25,38 @@ export function extractS3Key(url: string): string | null {
 }
 
 /**
- * Check if URL is an S3 URL
+ * Check if URL is an S3 URL (but not already signed)
+ * Returns false for already-signed URLs to avoid double-signing
  * @param url - URL to check
- * @returns true if it's an S3 URL
+ * @returns true if it's an S3 URL that needs signing
  */
 export function isS3Url(url: string): boolean {
-	return url.includes(".s3.") && url.includes(".amazonaws.com");
+	if (!url) return false;
+	const isS3 = url.includes(".s3.") && url.includes(".amazonaws.com");
+	// Don't consider already-signed URLs as needing to be signed again
+	const isAlreadySigned = url.includes('X-Amz-Signature');
+	return isS3 && !isAlreadySigned;
+}
+
+/**
+ * Clean S3 URL by removing any query parameters (including signature params)
+ * Use this before storing URLs in the database
+ * @param url - S3 URL that may have signature params
+ * @returns Clean S3 URL without query params
+ */
+export function cleanS3Url(url: string): string {
+	if (!url) return url;
+	// If it's an S3 URL, strip query params
+	if (url.includes(".s3.") && url.includes(".amazonaws.com")) {
+		return url.split('?')[0];
+	}
+	return url;
 }
 
 /**
  * Get signed URL for private S3 image (Server-side only)
- * @param s3Url - Direct S3 URL
+ * Handles already-signed URLs by extracting the key and re-signing
+ * @param s3Url - Direct S3 URL (may or may not already be signed)
  * @returns Signed URL that works with private buckets
  */
 export async function getSignedImageUrl(s3Url: string): Promise<string> {
@@ -122,7 +147,68 @@ export async function convertToSignedUrls(content: any): Promise<any> {
 }
 
 /**
+ * Server-side upload image directly to S3 using AWS SDK
+ * Use this from API routes instead of uploadImageToS3 (which is client-side only)
+ * @param base64Image - Base64 encoded image (with or without data URI prefix)
+ * @param fileName - Optional custom filename/path
+ * @returns Direct S3 URL (store this in database)
+ */
+export async function uploadImageToS3Server(
+	base64Image: string,
+	fileName?: string
+): Promise<string> {
+	const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
+	const { v4: uuidv4 } = await import("uuid");
+
+	const region = process.env.AWS_REGION!;
+	const bucketName = process.env.AWS_S3_BUCKET_NAME!;
+	
+	const s3Client = new S3Client({
+		region,
+		credentials: {
+			accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+		},
+	});
+
+	// Extract base64 data and mime type
+	let mimeType = 'image/jpeg';
+	let base64Data = base64Image;
+	
+	const matches = base64Image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+	if (matches && matches.length === 3) {
+		mimeType = matches[1];
+		base64Data = matches[2];
+	}
+
+	const buffer = Buffer.from(base64Data, "base64");
+
+	// Generate unique filename
+	const fileExtension = mimeType.split("/")[1] || 'jpg';
+	const uniqueFileName = fileName || `avatars/${uuidv4()}.${fileExtension}`;
+	const key = uniqueFileName.includes('/') ? uniqueFileName : `avatars/${uniqueFileName}`;
+
+	// Upload to S3
+	const command = new PutObjectCommand({
+		Bucket: bucketName,
+		Key: key,
+		Body: buffer,
+		ContentType: mimeType,
+	});
+
+	await s3Client.send(command);
+
+	// Generate the direct S3 URL
+	const directUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
+
+	console.log("✅ Server-side image uploaded successfully:", key);
+
+	return directUrl;
+}
+
+/**
  * Upload image to S3 via API and get direct S3 URL
+ * CLIENT-SIDE ONLY - Use uploadImageToS3Server for server-side uploads
  * Returns direct S3 URL (not presigned) for storage in database
  * Use getSignedImageUrl() to get presigned URL when displaying
  * @param base64Image - Base64 encoded image

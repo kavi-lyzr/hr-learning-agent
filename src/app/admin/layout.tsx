@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
+import { useUserProfile } from "@/hooks/use-queries";
 
 export default function AdminLayout({
   children,
@@ -16,6 +17,7 @@ export default function AdminLayout({
   const router = useRouter();
   const { currentOrganization, isLoading } = useOrganization();
   const { email, displayName } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
 
   useEffect(() => {
     if (!isLoading && !currentOrganization) {
@@ -40,8 +42,9 @@ export default function AdminLayout({
         <AppSidebar
           role="admin"
           user={{
-            name: displayName || undefined,
+            name: userProfile?.name || displayName || undefined,
             email: email || undefined,
+            avatarUrl: userProfile?.avatarUrl,
           }}
           organization={{
             name: currentOrganization.name,

@@ -19,11 +19,21 @@ import { ToolbarProvider } from "@/components/toolbars/toolbar-provider";
 // import { UndoToolbar } from "@/components/toolbars/undo";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Heading1, Heading2, Heading3, TableIcon } from "lucide-react";
 import { processEditorImages } from "@/lib/editor-utils";
 import { uploadImageToS3 as uploadToS3, cleanupRemovedImages, getSignedImageUrl } from "@/lib/s3-utils";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface RTEProps {
 	onChange?: (data: { html: string; json: any; text: string }) => void;
@@ -55,39 +65,70 @@ const createExtensions = (onImageUploadStart: () => void, onImageUploadEnd: () =
 	StarterKit.configure({
 		orderedList: {
 			HTMLAttributes: {
-				class: "list-decimal",
+				class: "list-decimal pl-6 my-4",
 			},
 		},
 		bulletList: {
 			HTMLAttributes: {
-				class: "list-disc",
+				class: "list-disc pl-6 my-4",
+			},
+		},
+		listItem: {
+			HTMLAttributes: {
+				class: "my-1",
 			},
 		},
 		code: {
 			HTMLAttributes: {
-				class: "bg-accent rounded-md p-1",
+				class: "bg-accent rounded-md px-1.5 py-0.5 font-mono text-sm",
 			},
 		},
 		horizontalRule: {
 			HTMLAttributes: {
-				class: "my-2",
+				class: "my-6 border-border",
 			},
 		},
 		codeBlock: {
 			HTMLAttributes: {
-				class: "bg-primary text-primary-foreground p-2 text-sm rounded-md p-1",
+				class: "bg-zinc-900 text-zinc-100 p-4 text-sm rounded-lg my-4 font-mono overflow-x-auto",
 			},
 		},
 		blockquote: {
 			HTMLAttributes: {
-				class: "text-accent p-2",
+				class: "border-l-4 border-primary pl-4 my-4 italic text-muted-foreground",
 			},
 		},
 		heading: {
-			levels: [1, 2, 3, 4],
+			levels: [1, 2, 3, 4, 5, 6],
 			HTMLAttributes: {
-				class: "tiptap-heading",
+				class: "tiptap-heading font-semibold",
 			},
+		},
+		paragraph: {
+			HTMLAttributes: {
+				class: "my-3 leading-relaxed",
+			},
+		},
+	}),
+	Table.configure({
+		resizable: true,
+		HTMLAttributes: {
+			class: "border-collapse border border-border my-4 w-full",
+		},
+	}),
+	TableRow.configure({
+		HTMLAttributes: {
+			class: "border-b border-border",
+		},
+	}),
+	TableHeader.configure({
+		HTMLAttributes: {
+			class: "border border-border bg-muted px-4 py-2 text-left font-semibold",
+		},
+	}),
+	TableCell.configure({
+		HTMLAttributes: {
+			class: "border border-border px-4 py-2",
 		},
 	}),
 	ImageExtension,
@@ -290,9 +331,35 @@ const StarterKitExample = ({
 				
 				<div className="flex w-full items-center py-2 px-2 justify-between border-b  sticky top-0 left-0 bg-background z-20">
 					<ToolbarProvider editor={editor}>
-						<div className="flex items-center gap-2">	
-							{/* <RedoToolbar /> */}
-							{/* <Separator orientation="vertical" className="h-7" /> */}
+						<div className="flex items-center gap-2 flex-wrap">	
+							{/* Headings Dropdown */}
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button variant="ghost" size="sm" className="h-8 px-2 gap-1">
+										<Heading1 className="h-4 w-4" />
+										<span className="text-xs">Heading</span>
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start">
+									<DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
+										<Heading1 className="h-4 w-4 mr-2" />
+										Heading 1
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+										<Heading2 className="h-4 w-4 mr-2" />
+										Heading 2
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
+										<Heading3 className="h-4 w-4 mr-2" />
+										Heading 3
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
+										<span className="mr-2 text-sm">¶</span>
+										Paragraph
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+							<Separator orientation="vertical" className="h-7" />
 							<BoldToolbar />
 							<ItalicToolbar />
 							<StrikeThroughToolbar />
@@ -302,6 +369,39 @@ const StarterKitExample = ({
 							<Separator orientation="vertical" className="h-7" />
 							<CodeToolbar />
 							<CodeBlockToolbar />
+							<Separator orientation="vertical" className="h-7" />
+							{/* Table Dropdown */}
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button variant="ghost" size="sm" className="h-8 px-2 gap-1">
+										<TableIcon className="h-4 w-4" />
+										<span className="text-xs">Table</span>
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start">
+									<DropdownMenuItem onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
+										Insert Table (3x3)
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().insertTable({ rows: 4, cols: 4, withHeaderRow: true }).run()}>
+										Insert Table (4x4)
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()} disabled={!editor.can().addColumnAfter()}>
+										Add Column After
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()} disabled={!editor.can().addRowAfter()}>
+										Add Row After
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()} disabled={!editor.can().deleteColumn()}>
+										Delete Column
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()} disabled={!editor.can().deleteRow()}>
+										Delete Row
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()} disabled={!editor.can().deleteTable()}>
+										Delete Table
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
 							<Separator orientation="vertical" className="h-7" />
 							<ImagePlaceholderToolbar />
 							<HorizontalRuleToolbar />

@@ -33,6 +33,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Member {
   _id: string;
@@ -49,6 +50,7 @@ interface Member {
     name?: string;
     email: string;
     lyzrId: string;
+    avatarUrl?: string;
   };
   coursesEnrolled: number;
   coursesCompleted: number;
@@ -76,14 +78,14 @@ interface Course {
 export default function AdminEmployeesPage() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  
+
   const [activeTab, setActiveTab] = useState<'employees' | 'departments'>('employees');
   const [members, setMembers] = useState<Member[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Add employee dialog
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [addingEmployee, setAddingEmployee] = useState(false);
@@ -118,7 +120,7 @@ export default function AdminEmployeesPage() {
 
     try {
       setLoading(true);
-      
+
       if (activeTab === 'employees') {
         await fetchMembers();
         await fetchDepartments(); // Need for department dropdown
@@ -135,7 +137,7 @@ export default function AdminEmployeesPage() {
 
   const fetchMembers = async () => {
     if (!currentOrganization) return;
-    
+
     const response = await fetch(`/api/organizations/${currentOrganization.id}/members`);
     if (!response.ok) throw new Error('Failed to fetch members');
     const data = await response.json();
@@ -208,7 +210,7 @@ export default function AdminEmployeesPage() {
 
     try {
       setBulkUploading(true);
-      
+
       // Parse CSV data
       const lines = csvData.trim().split('\n');
       const members = lines.slice(1).map(line => {
@@ -460,7 +462,7 @@ export default function AdminEmployeesPage() {
     URL.revokeObjectURL(url);
   };
 
-  const filteredMembers = members.filter(member => 
+  const filteredMembers = members.filter(member =>
     member.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     member.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -710,9 +712,17 @@ export default function AdminEmployeesPage() {
                     {filteredMembers.map((member) => (
                       <TableRow key={member._id}>
                         <TableCell>
-                          <div>
-                            <div className="font-medium">{member.name || 'Not set'}</div>
-                            <div className="text-sm text-muted-foreground">{member.email}</div>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
+                              <AvatarImage src={member.userId?.avatarUrl || ''} alt={member.name || member.email} />
+                              <AvatarFallback className="text-xs">
+                                {(member.name || member.email || 'U').charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium">{member.name || 'Not set'}</div>
+                              <div className="text-sm text-muted-foreground">{member.email}</div>
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -726,8 +736,8 @@ export default function AdminEmployeesPage() {
                           <Badge
                             variant={
                               member.status === 'active' ? 'default' :
-                              member.status === 'invited' ? 'secondary' :
-                              'outline'
+                                member.status === 'invited' ? 'secondary' :
+                                  'outline'
                             }
                           >
                             {member.status}

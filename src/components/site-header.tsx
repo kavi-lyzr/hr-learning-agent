@@ -27,6 +27,7 @@ import { LogOut, ChevronDown, Moon, Sun, Eye } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/AuthProvider";
 import { useOrganization } from "@/lib/OrganizationProvider";
+import { useUserProfile } from "@/hooks/use-queries";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FeatureRequestDialog } from "./shared/feature-request-dialog";
@@ -40,13 +41,11 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { email, displayName, logout, userId } = useAuth();
+  const { email, displayName, logout } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
   const [isAdminView, setIsAdminView] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [isRequestOpen, setIsRequestOpen] = useState(false);
   const [requestEmail, setRequestEmail] = useState<string>("");
-  const [requestMessage, setRequestMessage] = useState<string>("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const GITHUB_URL = "https://github.com/kavi-lyzr/hr-learning-agent";
   const APP_SLUG = "HR LMS Agent";
@@ -209,7 +208,7 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 pr-3 pl-0">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src="" />
+                  <AvatarImage src={userProfile?.avatarUrl || undefined} />
                   <AvatarFallback className="text-xs bg-muted">
                     {userDisplayName.charAt(0).toUpperCase()}
                   </AvatarFallback>

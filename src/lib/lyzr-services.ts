@@ -205,6 +205,11 @@ export async function createOrUpdateUser(
     // When an admin invites an employee, an OrganizationMember record is created with email but no userId
     // When that employee logs in, we need to link them to that invitation
     const OrganizationMember = (await import('@/models/organizationMember')).default;
+    const Department = (await import('@/models/department')).default;
+    const Enrollment = (await import('@/models/enrollment')).default;
+    const Course = (await import('@/models/course')).default;
+    const Organization = (await import('@/models/organization')).default;
+    const { sendCourseAssignmentEmail } = await import('@/lib/email-service');
 
     const pendingInvitations = await OrganizationMember.find({
         email: lyzrUser.email.toLowerCase(),
@@ -214,12 +219,79 @@ export async function createOrUpdateUser(
     if (pendingInvitations.length > 0) {
         console.log(`🔗 Found ${pendingInvitations.length} pending invitation(s) for ${lyzrUser.email}`);
 
-        // Link all invitations to this user
+        // Link all invitations to this user and handle auto-enrollment
         for (const invitation of pendingInvitations) {
             invitation.userId = user._id as mongoose.Types.ObjectId;
             invitation.status = 'active'; // Change from 'invited' to 'active'
             await invitation.save();
             console.log(`✅ Linked user to organization: ${invitation.organizationId}`);
+
+            // Auto-enroll in department courses if applicable
+            if (invitation.departmentId && invitation.role === 'employee') {
+                try {
+                    const department = await Department.findById(invitation.departmentId);
+                    
+                    if (department && department.autoEnroll && department.defaultCourseIds?.length > 0) {
+                        console.log(`📚 Auto-enrolling ${lyzrUser.email} in ${department.defaultCourseIds.length} department courses`);
+                        
+                        const organization = await Organization.findById(invitation.organizationId);
+                        
+                        for (const courseId of department.defaultCourseIds) {
+                            // Check if already enrolled
+                            const existingEnrollment = await Enrollment.findOne({
+                                userId: user._id,
+                                courseId: courseId,
+                            });
+
+                            if (existingEnrollment) {
+                                console.log(`⏭️  Already enrolled in course ${courseId}`);
+                                continue;
+                            }
+
+                            // Get course details
+                            const course = await Course.findById(courseId);
+                            if (!course) {
+                                console.warn(`⚠️  Course ${courseId} not found, skipping`);
+                                continue;
+                            }
+
+                            // Create enrollment
+                            const enrollment = new Enrollment({
+                                userId: user._id,
+                                courseId: courseId,
+                                organizationId: invitation.organizationId,
+                                status: 'not-started',
+                                progressPercentage: 0,
+                                progress: {
+                                    completedLessonIds: [],
+                                },
+                                enrolledAt: new Date(),
+                            });
+
+                            await enrollment.save();
+                            console.log(`✅ Auto-enrolled in course: ${course.title}`);
+
+                            // Send course assignment email
+                            try {
+                                const courseLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/employee/courses/${courseId}`;
+                                await sendCourseAssignmentEmail(
+                                    user,
+                                    course,
+                                    courseLink,
+                                    organization?.name
+                                );
+                                console.log(`📧 Course assignment email sent for: ${course.title}`);
+                            } catch (emailError) {
+                                console.error('Failed to send course assignment email:', emailError instanceof Error ? emailError.message : 'Unknown error');
+                                // Don't fail the enrollment if email fails
+                            }
+                        }
+                    }
+                } catch (enrollError) {
+                    console.error('Error during auto-enrollment:', enrollError);
+                    // Don't fail the user activation if enrollment fails
+                }
+            }
         }
     }
 

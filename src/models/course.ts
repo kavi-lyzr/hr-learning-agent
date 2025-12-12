@@ -36,7 +36,7 @@ export interface ICourse extends Document {
   organizationId: mongoose.Types.ObjectId;
   title: string;
   description?: string;
-  category: 'onboarding' | 'technical' | 'sales' | 'soft-skills' | 'compliance' | 'other';
+  category: string; // Dynamic categories per organization
   thumbnailUrl?: string;
   status: 'draft' | 'published' | 'archived';
   modules: IModule[]; // Embedded modules
@@ -89,7 +89,6 @@ const CourseSchema = new Schema<ICourse>({
   description: { type: String },
   category: {
     type: String,
-    enum: ['onboarding', 'technical', 'sales', 'soft-skills', 'compliance', 'other'],
     default: 'other'
   },
   thumbnailUrl: { type: String },

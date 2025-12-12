@@ -20,6 +20,8 @@ export interface IOrganization extends Document {
     agentId: string;
     version: string;
   };
+  // Custom course categories (defaults to standard categories if empty)
+  courseCategories?: string[];
   settings: {
     defaultTheme?: string;
     allowEmployeeSelfEnrollment?: boolean;
@@ -51,6 +53,8 @@ const OrganizationSchema = new Schema<IOrganization>({
     agentId: { type: String },
     version: { type: String },
   },
+  // Custom course categories
+  courseCategories: [{ type: String }],
   settings: {
     defaultTheme: { type: String, default: 'light' },
     allowEmployeeSelfEnrollment: { type: Boolean, default: false },
@@ -63,7 +67,7 @@ const OrganizationSchema = new Schema<IOrganization>({
 });
 
 // Indexes
-OrganizationSchema.index({ slug: 1 }, { unique: true });
+// Note: slug already has unique: true in schema definition, so no need for explicit index
 OrganizationSchema.index({ ownerId: 1 });
 
 // Clear cache

@@ -41,14 +41,29 @@ export async function GET(request: Request) {
       .populate('organizationId')
       .exec();
 
-    const organizations = memberships.map((m: any) => ({
-      id: m.organizationId._id,
-      name: m.organizationId.name,
-      slug: m.organizationId.slug,
-      iconUrl: m.organizationId.iconUrl,
-      role: m.role,
-      status: m.status,
-      joinedAt: m.joinedAt,
+    // Map organizations with signed icon URLs
+    const organizations = await Promise.all(memberships.map(async (m: any) => {
+      let signedIconUrl = m.organizationId.iconUrl;
+
+      // Sign S3 URLs for organization icons
+      if (signedIconUrl && isS3Url(signedIconUrl)) {
+        try {
+          signedIconUrl = await getSignedImageUrl(signedIconUrl);
+        } catch (error) {
+          console.error('Failed to sign org icon URL:', error);
+          signedIconUrl = null;
+        }
+      }
+
+      return {
+        id: m.organizationId._id,
+        name: m.organizationId.name,
+        slug: m.organizationId.slug,
+        iconUrl: signedIconUrl,
+        role: m.role,
+        status: m.status,
+        joinedAt: m.joinedAt,
+      };
     }));
 
     return NextResponse.json({ organizations });

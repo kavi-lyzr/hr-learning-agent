@@ -85,6 +85,13 @@ export default function LessonEditorPage() {
   const [quizConfigOpen, setQuizConfigOpen] = useState(false);
   const [numQuestions, setNumQuestions] = useState(5);
 
+  // Helper function to extract YouTube video ID
+  const getYouTubeVideoId = (url: string): string | null => {
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    const match = url.match(regExp);
+    return match && match[7].length === 11 ? match[7] : null;
+  };
+
   const [formData, setFormData] = useState<LessonFormData>({
     title: '',
     description: '',
@@ -577,22 +584,6 @@ export default function LessonEditorPage() {
                   Unsaved changes
                 </Badge>
               )}
-              <Button variant="outline" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Lesson
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         </div>
@@ -740,6 +731,21 @@ export default function LessonEditorPage() {
                     <p className="text-sm text-muted-foreground">
                       Enter a YouTube video URL. We'll automatically fetch the transcript.
                     </p>
+
+                    {/* YouTube Preview */}
+                    {formData.videoUrl && getYouTubeVideoId(formData.videoUrl) && (
+                      <div className="mt-4 rounded-lg overflow-hidden border bg-black/5">
+                        <div className="aspect-video">
+                          <iframe
+                            src={`https://www.youtube.com/embed/${getYouTubeVideoId(formData.videoUrl)}`}
+                            title="YouTube video preview"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            className="w-full h-full"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {formData.transcript.length > 0 && (
@@ -1220,6 +1226,43 @@ export default function LessonEditorPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Spacer for sticky bar */}
+        <div className="h-20" />
+      </div>
+
+      {/* Sticky Save Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t">
+        <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {hasChanges && (
+              <Badge variant="outline" className="text-orange-600 border-orange-600">
+                Unsaved changes
+              </Badge>
+            )}
+            <span className="text-sm text-muted-foreground hidden sm:inline">
+              {formData.title || 'Untitled Lesson'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Lesson
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
     </main>
   );

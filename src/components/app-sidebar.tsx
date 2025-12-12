@@ -191,10 +191,12 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
       </SidebarContent>
 
       <SidebarFooter>
-        {/* Credits Section */}
+        {/* Credits Section - Different UI for admin vs employee */}
         <div className="px-3 py-3 space-y-2 border-b">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Credits Left</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {role === "admin" ? "Credits Left" : "Organization Credits"}
+            </span>
             <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-muted-foreground text-right">
                 {Math.floor(credits || 0).toLocaleString()}
@@ -219,7 +221,9 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
                 <HoverCardContent align="end" className="w-64">
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-semibold mb-3">Credits Summary</h4>
+                      <h4 className="text-sm font-semibold mb-3">
+                        {role === "admin" ? "Credits Summary" : "Organization Credits"}
+                      </h4>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Total Credits</span>
@@ -255,7 +259,6 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
               </HoverCard>
             </div>
           </div>
-         
           {totalCredits && totalCredits > 0 && (
             <Progress
               value={(credits && credits > 0 ? (credits / totalCredits) * 100 : 0)}

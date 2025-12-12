@@ -8,6 +8,7 @@ import { SiteHeader } from "@/components/site-header";
 import { AiTutorPanel } from "@/components/ai-tutor-panel";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
+import { useUserProfile } from "@/hooks/use-queries";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -23,6 +24,7 @@ export default function EmployeeLayout({
   const pathname = usePathname();
   const { currentOrganization, isLoading } = useOrganization();
   const { email, displayName } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
 
   useEffect(() => {
     if (!isLoading && !currentOrganization) {
@@ -47,8 +49,9 @@ export default function EmployeeLayout({
         <AppSidebar
           role="employee"
           user={{
-            name: displayName || undefined,
+            name: userProfile?.name || displayName || undefined,
             email: email || undefined,
+            avatarUrl: userProfile?.avatarUrl,
           }}
           organization={{
             name: currentOrganization.name,

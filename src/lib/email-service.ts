@@ -94,6 +94,7 @@ const generateCourseAssignmentEmail = (data: CourseAssignmentEmailData) => {
       background-color: #811cd4;
       padding: 20px;
       margin: -40px -40px 30px -40px;
+      color: #ffffff;
     }
     .header h1 {
       margin: 0;

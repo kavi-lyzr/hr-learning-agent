@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
-import { toast } from "sonner";
+import { useEnrollments, useCourses } from "@/hooks/use-queries";
 import {
   BookOpen,
   Clock,
@@ -52,51 +52,29 @@ export default function EmployeeCoursesPage() {
   const { currentOrganization } = useOrganization();
   const { userId } = useAuth();
 
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [allCourses, setAllCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<'my-learning' | 'browse'>('my-learning');
   const [viewAllCourses, setViewAllCourses] = useState(false);
 
   const isAdmin = currentOrganization?.role === 'admin';
 
-  useEffect(() => {
-    if (currentOrganization && userId) {
-      fetchData();
-    }
-  }, [currentOrganization, userId, viewAllCourses]);
-
-  const fetchData = async () => {
-    if (!currentOrganization || !userId) return;
-
-    try {
-      setLoading(true);
-
-      // Fetch enrollments
-      const enrollmentsResponse = await fetch(
-        `/api/enrollments?userId=${userId}&organizationId=${currentOrganization.id}`
-      );
-      if (!enrollmentsResponse.ok) throw new Error('Failed to fetch enrollments');
-      const enrollmentsData = await enrollmentsResponse.json();
-      setEnrollments(enrollmentsData.enrollments || []);
-
-      // Fetch all courses if admin is viewing all or if on browse tab
-      if (isAdmin && viewAllCourses) {
-        const coursesResponse = await fetch(
-          `/api/organizations/${currentOrganization.id}/courses`
-        );
-        if (!coursesResponse.ok) throw new Error('Failed to fetch courses');
-        const coursesData = await coursesResponse.json();
-        setAllCourses(coursesData.courses?.filter((c: Course) => c.status === 'published') || []);
-      }
-    } catch (error: any) {
-      console.error('Error fetching data:', error);
-      toast.error('Failed to load courses');
-    } finally {
-      setLoading(false);
-    }
+  // Use React Query for data fetching with caching
+  const {
+    data: enrollments = [],
+    isLoading: enrollmentsLoading
+  } = useEnrollments(userId, currentOrganization?.id || null) as {
+    data: Enrollment[];
+    isLoading: boolean;
   };
+
+  // Fetch all courses for admins viewing all courses
+  const {
+    data: allCoursesData = [],
+    isLoading: coursesLoading
+  } = useCourses((isAdmin && viewAllCourses) ? currentOrganization?.id || null : null);
+
+  const allCourses = allCoursesData.filter((c: Course) => c.status === 'published');
+  const loading = enrollmentsLoading || (isAdmin && viewAllCourses && coursesLoading);
 
   const handleCourseClick = (courseId: string) => {
     router.push(`/employee/courses/${courseId}`);

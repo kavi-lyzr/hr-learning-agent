@@ -178,15 +178,15 @@ export default function LessonViewerPage() {
       let shouldComplete = false;
 
       if (lesson.contentType === 'video' && videoDuration > 0) {
-        // Complete when 90% watched
+        // Complete when 50% watched (relaxed from 90% since we can't track engagement properly)
         const progress = watchTime / videoDuration;
-        if (progress >= 0.9) {
+        if (progress >= 0.5) {
           shouldComplete = true;
         }
       } else if (lesson.contentType === 'article' || lesson.contentType === 'video-article') {
         // For articles or video-article lessons, just check article scroll
-        // Complete when 80% scrolled (or 100% if no scrolling needed)
-        if (scrollDepth >= 80) {
+        // Complete when 60% scrolled (relaxed from 80%, or 100% if no scrolling needed)
+        if (scrollDepth >= 60) {
           shouldComplete = true;
         }
       }
@@ -536,7 +536,7 @@ export default function LessonViewerPage() {
             <CardContent className="p-0">
               <div
                 ref={articleRef}
-                className="prose prose-sm md:prose-base lg:prose-lg max-w-none p-6 md:p-8 lg:p-12 overflow-y-auto max-h-[600px]"
+                className="prose max-w-none p-6 md:p-8 lg:p-12 overflow-y-auto max-h-[600px]"
                 dangerouslySetInnerHTML={{ __html: lesson.content.articleHtml }}
               />
             </CardContent>
@@ -561,7 +561,7 @@ export default function LessonViewerPage() {
                   <span className="font-medium">Progress</span>
                   {lesson.contentType === 'video' ? (
                     <span className="text-muted-foreground">
-                      {videoDuration > 0 ? Math.round((watchTime / videoDuration) * 100) : 0}% watched (90% to complete)
+                      {videoDuration > 0 ? Math.round((watchTime / videoDuration) * 100) : 0}% watched (50% to complete)
                     </span>
                   ) : (
                     <span className="text-muted-foreground">
@@ -579,7 +579,7 @@ export default function LessonViewerPage() {
                 />
                 {(lesson.contentType === 'article' || lesson.contentType === 'video-article') && (
                   <p className="text-xs text-muted-foreground">
-                    {scrollDepth >= 80 ? 'Ready to complete!' : 'Read to 80% to complete'}
+                    {scrollDepth >= 60 ? 'Ready to complete!' : 'Read to 60% to complete'}
                   </p>
                 )}
               </div>

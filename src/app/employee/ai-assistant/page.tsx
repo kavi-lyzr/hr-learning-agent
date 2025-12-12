@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOrganization } from "@/lib/OrganizationProvider";
@@ -13,10 +13,12 @@ interface Message {
   content: string;
   role: 'user' | 'assistant';
   timestamp: Date;
+  isStreaming?: boolean;
 }
 
 export default function EmployeeAIAssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const { currentOrganization } = useOrganization();
   const { userId } = useAuth();
 
@@ -30,12 +32,22 @@ export default function EmployeeAIAssistantPage() {
   ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async () => {
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  const handleSend = useCallback(async () => {
     if (!input.trim() || isSending) return;
 
     const userMessage: Message = {
@@ -45,56 +57,108 @@ export default function EmployeeAIAssistantPage() {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    // Create placeholder for AI response
+    const aiMessageId = (Date.now() + 1).toString();
+    const aiMessage: Message = {
+      id: aiMessageId,
+      content: '',
+      role: 'assistant',
+      timestamp: new Date(),
+      isStreaming: true,
+    };
+
+    setMessages(prev => [...prev, userMessage, aiMessage]);
     const messageContent = input;
     setInput("");
     setIsSending(true);
+
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
 
     try {
       if (!currentOrganization || !userId) {
         throw new Error('Please select an organization and sign in');
       }
 
-      const response = await fetch('/api/ai/chat', {
+      const response = await fetch('/api/ai/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: messageContent,
           organizationId: currentOrganization.id,
           userId: userId,
+          sessionId: sessionId,
           context: {
             currentPage: 'ai-assistant',
           },
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
         throw new Error('Failed to get AI response');
       }
 
-      const data = await response.json();
+      // Get session ID from header
+      const newSessionId = response.headers.get('X-Session-Id');
+      if (newSessionId) {
+        setSessionId(newSessionId);
+      }
 
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: data.response,
-        role: 'assistant',
-        timestamp: new Date(),
-      };
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
 
-      setMessages(prev => [...prev, aiResponse]);
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const content = line.slice(6);
+            
+            if (content === '[DONE]') {
+              // Stream complete
+              setMessages(prev => prev.map(msg =>
+                msg.id === aiMessageId
+                  ? { ...msg, isStreaming: false }
+                  : msg
+              ));
+            } else if (content) {
+              accumulatedContent += content;
+              setMessages(prev => prev.map(msg =>
+                msg.id === aiMessageId
+                  ? { ...msg, content: accumulatedContent }
+                  : msg
+              ));
+            }
+          }
+        }
+      }
+
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
       console.error('Error getting AI response:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "I'm sorry, I encountered an error. Please try again later.",
-        role: 'assistant',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => prev.map(msg =>
+        msg.id === aiMessageId
+          ? { ...msg, content: "I'm sorry, I encountered an error. Please try again later.", isStreaming: false }
+          : msg
+      ));
     } finally {
       setIsSending(false);
+      abortControllerRef.current = null;
     }
-  };
+  }, [input, isSending, currentOrganization, userId, sessionId]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -128,10 +192,7 @@ export default function EmployeeAIAssistantPage() {
             </div>
 
             {/* Messages */}
-            {messages.map((message, index) => {
-              const isLastMessage = index === messages.length - 1;
-              const isStreaming = isLastMessage && isSending && message.role === 'assistant';
-
+            {messages.map((message) => {
               return (
                 <div
                   key={message.id}
@@ -153,7 +214,7 @@ export default function EmployeeAIAssistantPage() {
                       {message.role === 'assistant' ? (
                         <Streamdown
                           parseIncompleteMarkdown={true}
-                          isAnimating={isStreaming}
+                          isAnimating={message.isStreaming}
                           components={{
                             a: ({ ...props }) => (
                               <a
@@ -240,8 +301,8 @@ export default function EmployeeAIAssistantPage() {
               );
             })}
 
-            {/* Loading Indicator */}
-            {isSending && (
+            {/* Loading Indicator - only show when waiting for first chunk */}
+            {isSending && messages[messages.length - 1]?.content === '' && (
               <div className="flex gap-4 justify-start animate-fade-in-up">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <Bot className="h-4 w-4 text-primary" />

@@ -305,9 +305,24 @@ export default function OrganizationsPage() {
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3 flex-1">
-                          <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                            <GraduationCap className="h-5 w-5 text-primary" />
-                          </div>
+                          {org.iconUrl ? (
+                            <div className="h-10 w-10 rounded-lg overflow-hidden flex-shrink-0">
+                              <img
+                                src={org.iconUrl}
+                                alt={org.name}
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  // Replace with fallback icon on error
+                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.parentElement!.innerHTML = `<div class="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors h-10 w-10 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-primary"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></div>`;
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                              <GraduationCap className="h-5 w-5 text-primary" />
+                            </div>
+                          )}
                           <div className="min-w-0 flex-1">
                             <h3 className="font-medium text-base truncate">
                               {org.name}

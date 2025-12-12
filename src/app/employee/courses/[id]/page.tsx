@@ -107,7 +107,14 @@ export default function CourseDetailPage() {
         if (enrollmentsResponse.ok) {
           const enrollmentsData = await enrollmentsResponse.json();
           const currentEnrollment = enrollmentsData.enrollments.find(
-            (e: any) => (e.courseId || e.course?._id) === courseId
+            (e: any) => {
+              // Handle both populated and non-populated courseId
+              // courseId could be: string, ObjectId, or populated course object
+              // Also check the separate course property that the API adds
+              const enrolledCourseId = e.course?._id?.toString() 
+                || (typeof e.courseId === 'string' ? e.courseId : e.courseId?._id?.toString());
+              return enrolledCourseId === courseId;
+            }
           );
           if (currentEnrollment) {
             setEnrollment(currentEnrollment);
@@ -156,10 +163,32 @@ export default function CourseDetailPage() {
         }
       }
 
-      // Navigate to first lesson
-      if (course.modules.length > 0 && course.modules[0].lessons.length > 0) {
-        const firstLesson = course.modules[0].lessons[0];
-        router.push(`/employee/courses/${course._id}/lessons/${firstLesson._id}`);
+      // Navigate to appropriate lesson
+      if (course.modules.length > 0) {
+        // Flatten all lessons in order
+        const allLessons = course.modules
+          .sort((a, b) => a.order - b.order)
+          .flatMap(m => (m.lessons || []).sort((a, b) => a.order - b.order));
+        
+        if (allLessons.length > 0) {
+          // Find the first incomplete lesson or the current lesson
+          let targetLesson = allLessons[0];
+          
+          if (enrollment && enrollment.progress.completedLessonIds.length > 0) {
+            // Find first lesson that's not completed
+            const firstIncompletelesson = allLessons.find(
+              l => !enrollment.progress.completedLessonIds.includes(l._id)
+            );
+            if (firstIncompletelesson) {
+              targetLesson = firstIncompletelesson;
+            } else {
+              // All completed, go to first lesson for review
+              targetLesson = allLessons[0];
+            }
+          }
+          
+          router.push(`/employee/courses/${course._id}/lessons/${targetLesson._id}`);
+        }
       }
     } catch (error: any) {
       console.error('Error starting course:', error);
@@ -283,14 +312,21 @@ export default function CourseDetailPage() {
             )}
 
             {enrollment && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">Your Progress</span>
-                  <span className="text-muted-foreground">
-                    {enrollment.progress.completedLessonIds.length} / {course.totalLessons} lessons completed
-                  </span>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">Your Progress</span>
+                    <span className="text-muted-foreground">
+                      {enrollment.progress.completedLessonIds.length} / {course.totalLessons} lessons completed
+                    </span>
+                  </div>
+                  <Progress value={enrollment.progressPercentage} className="h-2" />
                 </div>
-                <Progress value={enrollment.progressPercentage} className="h-2" />
+                <Button size="lg" className="w-full" onClick={handleStartCourse}>
+                  <PlayCircle className="h-5 w-5 mr-2" />
+                  {enrollment.progressPercentage === 100 ? 'Review Course' : 
+                   enrollment.progressPercentage > 0 ? 'Continue Course' : 'Start Course'}
+                </Button>
               </div>
             )}
 

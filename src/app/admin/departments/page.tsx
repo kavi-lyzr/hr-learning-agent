@@ -20,7 +20,7 @@ interface Department {
   _id: string;
   name: string;
   organizationId: string;
-  defaultCourseIds: string[];
+  defaultCourseIds: (string | { _id: string; title?: string })[];
   autoEnroll: boolean;
   memberCount: number;
   createdAt: string;
@@ -136,10 +136,14 @@ export default function AdminDepartmentsPage() {
 
   const handleEditClick = (dept: Department) => {
     setEditingDepartment(dept);
+    // Extract course IDs - defaultCourseIds may contain populated objects or strings
+    const courseIds = (dept.defaultCourseIds || []).map((course: any) => 
+      typeof course === 'string' ? course : course._id
+    );
     setFormData({
       name: dept.name,
       autoEnroll: dept.autoEnroll,
-      selectedCourses: dept.defaultCourseIds || [],
+      selectedCourses: courseIds,
     });
     setEditDialogOpen(true);
   };

@@ -148,7 +148,7 @@ export default function EmployeeLessonViewPage() {
                     )}
 
                     {lesson.type === 'article' && (
-                      <div className="p-8 prose prose-slate dark:prose-invert max-w-none">
+                      <div className="p-8 prose max-w-none">
                         <div dangerouslySetInnerHTML={{ __html: lesson.articleContent }} />
                       </div>
                     )}
