@@ -21,6 +21,7 @@ import {
   ArrowLeft,
   Video,
 } from "lucide-react";
+import { generateCourseGradient } from "@/lib/gradient-utils";
 
 interface Lesson {
   _id: string;
@@ -267,17 +268,22 @@ export default function CourseDetailPage() {
         <Card>
           <CardHeader>
             <div className="flex items-start gap-4">
-              {course.thumbnailUrl ? (
-                <img
-                  src={course.thumbnailUrl}
-                  alt={course.title}
-                  className="w-24 h-24 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="h-12 w-12 text-primary" />
-                </div>
-              )}
+              <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
+                {course.thumbnailUrl ? (
+                  <img
+                    src={course.thumbnailUrl}
+                    alt={course.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div 
+                    className="w-full h-full flex items-center justify-center"
+                    style={{ background: generateCourseGradient(course._id) }}
+                  >
+                    <BookOpen className="h-12 w-12 text-white/70" />
+                  </div>
+                )}
+              </div>
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4">
                   <div>

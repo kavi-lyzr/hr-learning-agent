@@ -16,6 +16,7 @@ import {
   PlayCircle,
   ArrowRight,
 } from "lucide-react";
+import { generateCourseGradient } from "@/lib/gradient-utils";
 
 interface Enrollment {
   _id: string;
@@ -50,21 +51,24 @@ export default function EmployeeDashboard() {
   // Cast to local Enrollment type that includes progress field
   const enrollments = enrollmentsData as unknown as Enrollment[];
 
-  // Calculate stats from enrollments
+  // Filter out enrollments with deleted/null courses to prevent crashes
+  const validEnrollments = enrollments.filter(e => e.course != null);
+
+  // Calculate stats from valid enrollments only
   const stats = {
-    coursesEnrolled: enrollments.length,
-    coursesCompleted: enrollments.filter(e => e.status === 'completed').length,
-    coursesInProgress: enrollments.filter(e => e.status === 'in-progress').length,
-    totalHoursLearned: enrollments.reduce((sum, e) =>
+    coursesEnrolled: validEnrollments.length,
+    coursesCompleted: validEnrollments.filter(e => e.status === 'completed').length,
+    coursesInProgress: validEnrollments.filter(e => e.status === 'in-progress').length,
+    totalHoursLearned: validEnrollments.reduce((sum, e) =>
       sum + ((e.course.estimatedDuration || 0) * (e.progressPercentage / 100)), 0
     ) / 60, // Convert minutes to hours
-    averageProgress: enrollments.length > 0
-      ? Math.round(enrollments.reduce((sum, e) => sum + e.progressPercentage, 0) / enrollments.length)
+    averageProgress: validEnrollments.length > 0
+      ? Math.round(validEnrollments.reduce((sum, e) => sum + e.progressPercentage, 0) / validEnrollments.length)
       : 0,
   };
 
   // Get the most recently accessed in-progress course
-  const continueLearning = enrollments
+  const continueLearning = validEnrollments
     .filter(e => e.status === 'in-progress')
     .sort((a, b) => b.progressPercentage - a.progressPercentage)[0];
 
@@ -153,19 +157,22 @@ export default function EmployeeDashboard() {
                 className="flex items-start gap-4 p-4 border rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer"
                 onClick={() => router.push(`/employee/courses/${continueLearning.course._id}`)}
               >
-                {continueLearning.course.thumbnailUrl ? (
-                  <div className="h-12 w-12 rounded-lg overflow-hidden flex-shrink-0">
+                <div className="h-12 w-12 rounded-lg overflow-hidden flex-shrink-0">
+                  {continueLearning.course.thumbnailUrl ? (
                     <img
                       src={continueLearning.course.thumbnailUrl}
                       alt={continueLearning.course.title}
                       className="h-full w-full object-cover"
                     />
-                  </div>
-                ) : (
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <PlayCircle className="h-6 w-6 text-primary" />
-                  </div>
-                )}
+                  ) : (
+                    <div 
+                      className="h-full w-full flex items-center justify-center"
+                      style={{ background: generateCourseGradient(continueLearning.course._id) }}
+                    >
+                      <PlayCircle className="h-6 w-6 text-white/70" />
+                    </div>
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold mb-1">{continueLearning.course.title}</h3>
                   <p className="text-sm text-muted-foreground mb-2 capitalize">
@@ -220,7 +227,7 @@ export default function EmployeeDashboard() {
                 </Card>
               ))}
             </div>
-          ) : enrollments.length === 0 ? (
+          ) : validEnrollments.length === 0 ? (
             <Card className="p-12 text-center">
               <div className="flex flex-col items-center gap-4">
                 <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -236,40 +243,34 @@ export default function EmployeeDashboard() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {enrollments.slice(0, 6).map((enrollment) => (
+              {validEnrollments.slice(0, 6).map((enrollment) => (
                 <Card
                   key={enrollment._id}
                   className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
                   onClick={() => router.push(`/employee/courses/${enrollment.course._id}`)}
                 >
-                  {enrollment.course.thumbnailUrl ? (
-                    <div className="w-full h-40 bg-muted overflow-hidden">
+                  <div className="w-full h-40 overflow-hidden">
+                    {enrollment.course.thumbnailUrl ? (
                       <img
                         src={enrollment.course.thumbnailUrl}
                         alt={enrollment.course.title}
                         className="w-full h-full object-cover"
                       />
-                    </div>
-                  ) : (
-                    <CardHeader>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <BookOpen className="h-5 w-5 text-primary" />
-                        </div>
-                        <span className="text-xs px-2 py-1 bg-muted rounded-full capitalize">
-                          {enrollment.course.category.replace('-', ' ')}
-                        </span>
-                      </div>
-                    </CardHeader>
-                  )}
-                  <CardContent className={enrollment.course.thumbnailUrl ? "pt-4" : ""}>
-                    {enrollment.course.thumbnailUrl && (
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs px-2 py-1 bg-muted rounded-full capitalize">
-                          {enrollment.course.category.replace('-', ' ')}
-                        </span>
+                    ) : (
+                      <div 
+                        className="w-full h-full flex items-center justify-center"
+                        style={{ background: generateCourseGradient(enrollment.course._id) }}
+                      >
+                        <BookOpen className="h-12 w-12 text-white/60" />
                       </div>
                     )}
+                  </div>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs px-2 py-1 bg-muted rounded-full capitalize">
+                        {enrollment.course.category.replace('-', ' ')}
+                      </span>
+                    </div>
                     <CardTitle className="text-base mb-3">{enrollment.course.title}</CardTitle>
                     <div className="space-y-3">
                       <div className="text-sm text-muted-foreground">

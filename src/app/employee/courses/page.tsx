@@ -21,6 +21,7 @@ import {
   PlayCircle,
   Eye,
 } from "lucide-react";
+import { generateCourseGradient } from "@/lib/gradient-utils";
 
 interface Enrollment {
   _id: string;
@@ -182,34 +183,28 @@ export default function EmployeeCoursesPage() {
                     className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
                     onClick={() => handleCourseClick(course._id)}
                   >
-                    {course.thumbnailUrl ? (
-                      <div className="w-full h-40 bg-muted overflow-hidden">
+                    <div className="w-full h-40 overflow-hidden">
+                      {course.thumbnailUrl ? (
                         <img
                           src={course.thumbnailUrl}
                           alt={course.title}
                           className="w-full h-full object-cover"
                         />
-                      </div>
-                    ) : (
-                      <CardHeader>
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <BookOpen className="h-5 w-5 text-primary" />
-                          </div>
-                          <Badge variant="secondary" className="capitalize">
-                            {course.category.replace('-', ' ')}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                    )}
-                    <CardContent className={course.thumbnailUrl ? "pt-4" : ""}>
-                      {course.thumbnailUrl && (
-                        <div className="flex items-center justify-between mb-3">
-                          <Badge variant="secondary" className="capitalize">
-                            {course.category.replace('-', ' ')}
-                          </Badge>
+                      ) : (
+                        <div 
+                          className="w-full h-full flex items-center justify-center"
+                          style={{ background: generateCourseGradient(course._id) }}
+                        >
+                          <BookOpen className="h-12 w-12 text-white/60" />
                         </div>
                       )}
+                    </div>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <Badge variant="secondary" className="capitalize">
+                          {course.category.replace('-', ' ')}
+                        </Badge>
+                      </div>
                       <CardTitle className="text-base mb-2">{course.title}</CardTitle>
                       {course.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
@@ -243,34 +238,28 @@ export default function EmployeeCoursesPage() {
                       className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
                       onClick={() => handleCourseClick(enrollment.course._id)}
                     >
-                      {enrollment.course.thumbnailUrl ? (
-                        <div className="w-full h-40 bg-muted overflow-hidden">
+                      <div className="w-full h-40 overflow-hidden">
+                        {enrollment.course.thumbnailUrl ? (
                           <img
                             src={enrollment.course.thumbnailUrl}
                             alt={enrollment.course.title}
                             className="w-full h-full object-cover"
                           />
-                        </div>
-                      ) : (
-                        <CardHeader>
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <BookOpen className="h-5 w-5 text-primary" />
-                            </div>
-                            <Badge variant="secondary" className="capitalize">
-                              {enrollment.course.category.replace('-', ' ')}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                      )}
-                      <CardContent className={enrollment.course.thumbnailUrl ? "pt-4" : ""}>
-                        {enrollment.course.thumbnailUrl && (
-                          <div className="flex items-center justify-between mb-3">
-                            <Badge variant="secondary" className="capitalize">
-                              {enrollment.course.category.replace('-', ' ')}
-                            </Badge>
+                        ) : (
+                          <div 
+                            className="w-full h-full flex items-center justify-center"
+                            style={{ background: generateCourseGradient(enrollment.course._id) }}
+                          >
+                            <BookOpen className="h-12 w-12 text-white/60" />
                           </div>
                         )}
+                      </div>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <Badge variant="secondary" className="capitalize">
+                            {enrollment.course.category.replace('-', ' ')}
+                          </Badge>
+                        </div>
                         <CardTitle className="text-base mb-3">{enrollment.course.title}</CardTitle>
                         <div className="space-y-3">
                           <div className="text-sm text-muted-foreground">
@@ -305,34 +294,28 @@ export default function EmployeeCoursesPage() {
                       className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
                       onClick={() => handleCourseClick(enrollment.course._id)}
                     >
-                      {enrollment.course.thumbnailUrl ? (
-                        <div className="w-full h-40 bg-muted overflow-hidden">
+                      <div className="w-full h-40 overflow-hidden">
+                        {enrollment.course.thumbnailUrl ? (
                           <img
                             src={enrollment.course.thumbnailUrl}
                             alt={enrollment.course.title}
                             className="w-full h-full object-cover"
                           />
-                        </div>
-                      ) : (
-                        <CardHeader>
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <PlayCircle className="h-5 w-5 text-primary" />
-                            </div>
-                            <Badge variant="secondary" className="capitalize">
-                              {enrollment.course.category.replace('-', ' ')}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                      )}
-                      <CardContent className={enrollment.course.thumbnailUrl ? "pt-4" : ""}>
-                        {enrollment.course.thumbnailUrl && (
-                          <div className="flex items-center justify-between mb-3">
-                            <Badge variant="secondary" className="capitalize">
-                              {enrollment.course.category.replace('-', ' ')}
-                            </Badge>
+                        ) : (
+                          <div 
+                            className="w-full h-full flex items-center justify-center"
+                            style={{ background: generateCourseGradient(enrollment.course._id) }}
+                          >
+                            <PlayCircle className="h-12 w-12 text-white/60" />
                           </div>
                         )}
+                      </div>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <Badge variant="secondary" className="capitalize">
+                            {enrollment.course.category.replace('-', ' ')}
+                          </Badge>
+                        </div>
                         <CardTitle className="text-base mb-3">{enrollment.course.title}</CardTitle>
                         <div className="space-y-3">
                           <div className="text-sm text-muted-foreground">
@@ -360,32 +343,26 @@ export default function EmployeeCoursesPage() {
                       className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
                       onClick={() => handleCourseClick(enrollment.course._id)}
                     >
-                      {enrollment.course.thumbnailUrl ? (
-                        <div className="w-full h-40 bg-muted overflow-hidden">
+                      <div className="w-full h-40 overflow-hidden">
+                        {enrollment.course.thumbnailUrl ? (
                           <img
                             src={enrollment.course.thumbnailUrl}
                             alt={enrollment.course.title}
                             className="w-full h-full object-cover"
                           />
-                        </div>
-                      ) : (
-                        <CardHeader>
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <BookOpen className="h-5 w-5 text-primary" />
-                            </div>
-                            <Badge variant="default" className="capitalize">
-                              Completed
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                      )}
-                      <CardContent className={enrollment.course.thumbnailUrl ? "pt-4" : ""}>
-                        {enrollment.course.thumbnailUrl && (
-                          <div className="flex items-center justify-between mb-3">
-                            <Badge variant="default">Completed</Badge>
+                        ) : (
+                          <div 
+                            className="w-full h-full flex items-center justify-center"
+                            style={{ background: generateCourseGradient(enrollment.course._id) }}
+                          >
+                            <BookOpen className="h-12 w-12 text-white/60" />
                           </div>
                         )}
+                      </div>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <Badge variant="default">Completed</Badge>
+                        </div>
                         <CardTitle className="text-base mb-3">{enrollment.course.title}</CardTitle>
                         <div className="space-y-3">
                           <div className="text-sm text-muted-foreground">

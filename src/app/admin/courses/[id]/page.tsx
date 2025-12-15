@@ -17,6 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { toast } from "sonner";
 import { uploadImageToS3 } from "@/lib/s3-utils";
 import { useOrganization } from "@/lib/OrganizationProvider";
+import { useInvalidateQueries } from "@/hooks/use-queries";
 import {
   ChevronLeft,
   Plus,
@@ -87,6 +88,7 @@ export default function CourseDetailPage() {
   const params = useParams();
   const courseId = params.id as string;
   const { currentOrganization } = useOrganization();
+  const { invalidateCourses } = useInvalidateQueries();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
@@ -257,6 +259,11 @@ export default function CourseDetailPage() {
       setCourse(data.course);
       setEditDetailsDialogOpen(false);
       toast.success('Course details updated successfully!');
+
+      // Invalidate courses cache so the list shows updated data
+      if (currentOrganization) {
+        invalidateCourses(currentOrganization.id);
+      }
     } catch (error: any) {
       console.error('Error saving course details:', error);
       toast.error('Failed to save course details');
@@ -289,6 +296,11 @@ export default function CourseDetailPage() {
       setCourse(data.course);
       setHasChanges(false);
       toast.success('Course saved successfully!');
+
+      // Invalidate courses cache so the list shows updated data
+      if (currentOrganization) {
+        invalidateCourses(currentOrganization.id);
+      }
     } catch (error: any) {
       console.error('Error saving course:', error);
       toast.error('Failed to save course');

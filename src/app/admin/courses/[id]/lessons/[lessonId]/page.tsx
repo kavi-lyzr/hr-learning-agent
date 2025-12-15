@@ -14,8 +14,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import RTE from "@/components/RTE";
+import { BreadcrumbNav } from "@/components/BreadcrumbNav";
 import { convertToSignedUrls, convertToDirectUrls } from "@/lib/s3-utils";
 import { estimateLessonDuration, calculateCourseDuration } from "@/lib/duration-utils";
 import {
@@ -72,6 +74,7 @@ export default function LessonEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchingTranscript, setFetchingTranscript] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
   const [editableTranscript, setEditableTranscript] = useState('');
@@ -205,6 +208,7 @@ export default function LessonEditorPage() {
 
     try {
       setFetchingTranscript(true);
+      setTranscriptError(null); // Clear any previous errors
       const response = await fetch('/api/transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -232,7 +236,8 @@ export default function LessonEditorPage() {
       handleOpenTranscriptEditor(normalizedTranscript);
     } catch (error: any) {
       console.error('Error fetching transcript:', error);
-      toast.error(error.message || 'Failed to fetch transcript');
+      setTranscriptError(error.message || 'Failed to fetch transcript');
+      // Don't show toast error - we'll show Alert instead
     } finally {
       setFetchingTranscript(false);
     }
@@ -561,24 +566,34 @@ export default function LessonEditorPage() {
     return null;
   }
 
-  return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="space-y-4">
-          <Button variant="ghost" onClick={handleCancel} className="gap-2">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Course
-          </Button>
+  // Get current module info for breadcrumb
+  const currentModule = course?.modules?.find((m: any) => String(m._id) === String(moduleId));
+  const currentLesson = currentModule?.lessons?.find((l: any) => String(l._id) === String(lessonId));
 
+  return (
+    <>
+      {/* Sticky Breadcrumb Navigation */}
+      <BreadcrumbNav
+        items={[
+          { label: 'Courses', href: '/admin/courses' },
+          { label: course.title, href: `/admin/courses/${courseId}` },
+          ...(currentModule ? [{ label: currentModule.title }] : []),
+          { label: isNew ? 'New Lesson' : (currentLesson?.title || formData.title || 'Edit Lesson') },
+        ]}
+        onSave={handleSave}
+        saving={saving}
+        showSaveButton={true}
+        hasChanges={hasChanges}
+      />
+
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Page Title */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <h1 className="text-3xl font-bold mb-2">
                 {isNew ? 'Create New Lesson' : 'Edit Lesson'}
               </h1>
-              <p className="text-muted-foreground">{course.title}</p>
-            </div>
-            <div className="flex items-center gap-2">
               {hasChanges && (
                 <Badge variant="outline" className="text-orange-600 border-orange-600">
                   Unsaved changes
@@ -586,7 +601,6 @@ export default function LessonEditorPage() {
               )}
             </div>
           </div>
-        </div>
 
         {/* Basic Information */}
         <Card>
@@ -745,6 +759,29 @@ export default function LessonEditorPage() {
                           />
                         </div>
                       </div>
+                    )}
+
+                    {/* Transcript Error Alert */}
+                    {transcriptError && (
+                      <Alert variant="destructive" className="mt-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Transcript Unavailable</AlertTitle>
+                        <AlertDescription>
+                          <p className="mb-3">
+                            This video has no auto-generated transcripts or subtitles are disabled.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setTranscriptError(null);
+                              handleOpenTranscriptEditor([]);
+                            }}
+                          >
+                            Add Transcript Manually
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
                     )}
                   </div>
 
@@ -1226,45 +1263,9 @@ export default function LessonEditorPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Spacer for sticky bar */}
-        <div className="h-20" />
-      </div>
-
-      {/* Sticky Save Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t">
-        <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {hasChanges && (
-              <Badge variant="outline" className="text-orange-600 border-orange-600">
-                Unsaved changes
-              </Badge>
-            )}
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              {formData.title || 'Untitled Lesson'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Lesson
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
       </div>
     </main>
+    </>
   );
 }
 

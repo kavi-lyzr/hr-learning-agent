@@ -33,8 +33,11 @@ import {
   Upload,
   X,
   Image as ImageIcon,
+  Download,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { CourseImportDialog } from "@/components/admin/CourseImportDialog";
+import { generateCourseGradient } from "@/lib/gradient-utils";
 import Image from "next/image";
 
 interface Course {
@@ -65,10 +68,12 @@ export default function AdminCoursesPage() {
   const { invalidateCourses } = useInvalidateQueries();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'archived'>('all');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [userOrganizations, setUserOrganizations] = useState<any[]>([]);
   const [categories, setCategories] = useState<{ value: string; label: string }[]>([
     { value: 'onboarding', label: 'Onboarding' },
     { value: 'technical', label: 'Technical' },
@@ -108,6 +113,23 @@ export default function AdminCoursesPage() {
     };
     fetchCategories();
   }, [currentOrganization]);
+
+  // Fetch user's organizations for import dialog
+  useEffect(() => {
+    const fetchOrganizations = async () => {
+      if (!userId) return;
+      try {
+        const res = await fetch(`/api/organizations?userId=${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUserOrganizations(data.organizations || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch organizations:', error);
+      }
+    };
+    fetchOrganizations();
+  }, [userId]);
 
   const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -311,13 +333,18 @@ export default function AdminCoursesPage() {
               Create and manage learning courses
             </p>
           </div>
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Create Course
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => setImportDialogOpen(true)}>
+              <Download className="h-4 w-4" />
+              Import from Org
+            </Button>
+            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Course
+                </Button>
+              </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Create New Course</DialogTitle>
@@ -349,11 +376,16 @@ export default function AdminCoursesPage() {
                   <Label>Course Thumbnail (optional)</Label>
                   {formData.thumbnailPreview ? (
                     <div className="relative w-full h-48 border rounded-lg overflow-hidden group">
-                      <Image
+                      {/* <Image
                         src={formData.thumbnailPreview}
                         alt="Thumbnail preview"
                         className="w-full h-full object-cover"
-                        fill
+                        fill 
+                      /> */}
+                      <img
+                        src={formData.thumbnailPreview}
+                        alt="Thumbnail preview"
+                        className="w-full h-full object-cover"
                       />
                       <button
                         type="button"
@@ -431,7 +463,22 @@ export default function AdminCoursesPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
+
+        {/* Course Import Dialog */}
+        <CourseImportDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          currentOrgId={currentOrganization?.id || ''}
+          userId={userId || ''}
+          availableOrgs={userOrganizations}
+          onImportComplete={() => {
+            if (currentOrganization) {
+              invalidateCourses(currentOrganization.id);
+            }
+          }}
+        />
 
         {/* Search and Filter */}
         <div className="flex items-center justify-between gap-4">
@@ -503,20 +550,23 @@ export default function AdminCoursesPage() {
               .map((course, index) => (
                 <Card
                   key={course._id}
-                  className={`group cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-300 overflow-hidden animate-card-enter stagger-${Math.min(index + 1, 9)}`}
+                  className={`group cursor-pointer hover:shadow-lg hover:bg-muted/50 rounded-sm pt-0 transition-all duration-300 overflow-hidden animate-card-enter stagger-${Math.min(index + 1, 9)}`}
                   onClick={() => handleEditCourse(course._id)}
                 >
                   {/* Thumbnail or Gradient Placeholder */}
-                  <div className="relative w-full h-40 overflow-hidden">
+                  <div className="relative w-full h-36 overflow-hidden">
                     {(course as any).thumbnailUrl ? (
                       <img
                         src={(course as any).thumbnailUrl}
                         alt={course.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-cover transition-transform duration-300"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-primary/20 via-primary/10 to-secondary flex items-center justify-center">
-                        <BookOpen className="h-12 w-12 text-primary/40" />
+                      <div 
+                        className="w-full h-full flex items-center justify-center"
+                        style={{ background: generateCourseGradient(course._id) }}
+                      >
+                        <BookOpen className="h-12 w-12 text-white/60" />
                       </div>
                     )}
                     {/* Status badge overlay */}

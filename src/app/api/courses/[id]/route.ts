@@ -141,6 +141,16 @@ export async function PUT(
       await recalculateEnrollmentProgress(id, course);
     }
 
+    // Convert thumbnail to presigned URL for response
+    if (course.thumbnailUrl && course.thumbnailUrl.includes('.s3.') && course.thumbnailUrl.includes('.amazonaws.com')) {
+      try {
+        const cleanUrl = cleanS3Url(course.thumbnailUrl);
+        (course as any).thumbnailUrl = await getSignedImageUrl(cleanUrl);
+      } catch (error) {
+        console.error('Error getting signed URL for thumbnail:', error);
+      }
+    }
+
     return NextResponse.json({ course });
   } catch (error: any) {
     console.error('Error updating course:', error);
