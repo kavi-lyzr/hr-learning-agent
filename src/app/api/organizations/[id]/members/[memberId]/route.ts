@@ -46,7 +46,8 @@ export async function PUT(
     }
 
     if (departmentId !== undefined) {
-      if (departmentId === null) {
+      // Handle "general" department - it's stored in organization, not departments collection
+      if (departmentId === null || departmentId === 'general') {
         updateData.departmentId = null;
       } else {
         if (!mongoose.Types.ObjectId.isValid(departmentId)) {

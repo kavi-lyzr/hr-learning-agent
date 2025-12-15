@@ -50,6 +50,7 @@ export async function GET(
         iconUrl,
         ownerId: organization.ownerId,
         settings: organization.settings,
+        generalDepartment: organization.generalDepartment,
         memberCount,
         createdAt: organization.createdAt,
         updatedAt: organization.updatedAt,

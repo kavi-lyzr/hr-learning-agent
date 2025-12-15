@@ -12,6 +12,7 @@ interface Course {
   _id: string;
   title: string;
   category: string;
+  status: string;
 }
 
 interface CourseSelectorProps {
@@ -21,6 +22,7 @@ interface CourseSelectorProps {
   departmentCourseIds?: string[]; // Courses from selected department
   generalDepartmentCourseIds?: string[]; // Courses from general department
   showSearch?: boolean;
+  onDraftCourseWarning?: () => void; // Callback when draft course is selected
 }
 
 export function CourseSelector({
@@ -30,14 +32,24 @@ export function CourseSelector({
   departmentCourseIds = [],
   generalDepartmentCourseIds = [],
   showSearch = true,
+  onDraftCourseWarning,
 }: CourseSelectorProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showDraftWarning, setShowDraftWarning] = useState(false);
 
-  const handleCourseToggle = (courseId: string) => {
+  const handleCourseToggle = (courseId: string, isDraft: boolean) => {
     if (selectedCourseIds.includes(courseId)) {
       onSelectionChange(selectedCourseIds.filter(id => id !== courseId));
     } else {
-      onSelectionChange([...selectedCourseIds, courseId]);
+      // Show warning for draft courses
+      if (isDraft && !showDraftWarning) {
+        setShowDraftWarning(true);
+        if (confirm('⚠️ This course is in draft status.\n\nDraft courses will not be visible to employees and won\'t count towards their progress until they are published.\n\nDo you want to assign it anyway?')) {
+          onSelectionChange([...selectedCourseIds, courseId]);
+        }
+      } else {
+        onSelectionChange([...selectedCourseIds, courseId]);
+      }
     }
   };
 
@@ -100,23 +112,29 @@ export function CourseSelector({
           {filteredCourses.map((course) => {
             const isFromDepartment = departmentCourseIds.includes(course._id);
             const isFromGeneral = generalDepartmentCourseIds.includes(course._id);
+            const isDraft = course.status !== 'published';
 
             return (
               <div
                 key={course._id}
-                className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-muted"
-                onClick={() => handleCourseToggle(course._id)}
+                className={`flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-muted ${isDraft ? 'opacity-60' : ''}`}
+                onClick={() => handleCourseToggle(course._id, isDraft)}
               >
                 <Checkbox
                   id={`course-${course._id}`}
                   checked={selectedCourseIds.includes(course._id)}
-                  onCheckedChange={() => handleCourseToggle(course._id)}
+                  onCheckedChange={() => handleCourseToggle(course._id, isDraft)}
                   onClick={(e) => e.stopPropagation()}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium flex items-center gap-2">
+                  <div className="text-sm font-medium flex items-center gap-2 flex-wrap">
                     <BookOpen className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                     <span className="flex-1">{course.title}</span>
+                    {isDraft && (
+                      <Badge variant="outline" className="text-xs flex-shrink-0 border-orange-500 text-orange-600">
+                        Draft
+                      </Badge>
+                    )}
                     {isFromDepartment && (
                       <Badge variant="secondary" className="text-xs flex-shrink-0">
                         From Dept

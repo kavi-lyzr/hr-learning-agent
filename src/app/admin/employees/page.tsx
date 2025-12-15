@@ -179,7 +179,8 @@ export default function AdminEmployeesPage() {
     const response = await fetch(`/api/organizations/${currentOrganization.id}/courses`);
     if (!response.ok) throw new Error('Failed to fetch courses');
     const data = await response.json();
-    setCourses(data.courses?.filter((c: Course) => c.status === 'published') || []);
+    // Include all courses (published and draft) for assignment
+    setCourses(data.courses || []);
   };
 
   const handleAddEmployee = async () => {
@@ -700,7 +701,7 @@ export default function AdminEmployeesPage() {
                             }
                             generalDepartmentCourseIds={
                               employeeForm.departmentId === 'general' || !employeeForm.departmentId || employeeForm.departmentId === 'default'
-                                ? (organization?.generalDepartment?.courseIds || []).map((id: any) => id.toString())
+                                ? (organization?.generalDepartment?.courseIds || []).map((id: any) => typeof id === 'string' ? id : id.toString())
                                 : []
                             }
                           />
@@ -952,7 +953,7 @@ export default function AdminEmployeesPage() {
                       }
                       generalDepartmentCourseIds={
                         editingEmployee.departmentId?._id === 'general' || !editingEmployee.departmentId
-                          ? (organization?.generalDepartment?.courseIds || []).map((id: any) => id.toString())
+                          ? (organization?.generalDepartment?.courseIds || []).map((id: any) => typeof id === 'string' ? id : id.toString())
                           : []
                       }
                     />

@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { BookOpen, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +18,7 @@ interface Course {
   _id: string;
   title: string;
   category: string;
+  status: string;
 }
 
 interface Department {
@@ -91,7 +93,8 @@ export function DepartmentFormDialog({
       const response = await fetch(`/api/courses?organizationId=${organizationId}`);
       if (!response.ok) throw new Error('Failed to fetch courses');
       const data = await response.json();
-      setCourses((data.courses || []).filter((c: Course) => c.status === 'published'));
+      // Include all courses (published and draft) for department configuration
+      setCourses(data.courses || []);
     } catch (error: any) {
       console.error('Error fetching courses:', error);
     } finally {
@@ -99,13 +102,29 @@ export function DepartmentFormDialog({
     }
   };
 
-  const handleCourseToggle = (courseId: string) => {
-    setFormData(prev => ({
-      ...prev,
-      selectedCourses: prev.selectedCourses.includes(courseId)
-        ? prev.selectedCourses.filter(id => id !== courseId)
-        : [...prev.selectedCourses, courseId]
-    }));
+  const handleCourseToggle = (courseId: string, isDraft: boolean) => {
+    if (formData.selectedCourses.includes(courseId)) {
+      // Removing - no warning needed
+      setFormData(prev => ({
+        ...prev,
+        selectedCourses: prev.selectedCourses.filter(id => id !== courseId)
+      }));
+    } else {
+      // Adding - warn if draft
+      if (isDraft) {
+        if (confirm('⚠️ This course is in draft status.\n\nDraft courses will not be visible to employees and won\'t count towards their progress until they are published.\n\nDo you want to add it to this department anyway?')) {
+          setFormData(prev => ({
+            ...prev,
+            selectedCourses: [...prev.selectedCourses, courseId]
+          }));
+        }
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          selectedCourses: [...prev.selectedCourses, courseId]
+        }));
+      }
+    }
   };
 
   const handleSubmit = async (skipConfirmation = false) => {
@@ -247,29 +266,38 @@ export function DepartmentFormDialog({
               ) : (
                 <ScrollArea className="h-64 border rounded-lg p-4">
                   <div className="space-y-2">
-                    {courses.map((course) => (
-                      <div
-                        key={course._id}
-                        className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-muted"
-                        onClick={() => handleCourseToggle(course._id)}
-                      >
-                        <Checkbox
-                          id={`course-${course._id}`}
-                          checked={formData.selectedCourses.includes(course._id)}
-                          onCheckedChange={() => handleCourseToggle(course._id)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium flex items-center gap-2">
-                            <BookOpen className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                            <span className="flex-1">{course.title}</span>
+                    {courses.map((course) => {
+                      const isDraft = course.status !== 'published';
+
+                      return (
+                        <div
+                          key={course._id}
+                          className={`flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-muted ${isDraft ? 'opacity-60' : ''}`}
+                          onClick={() => handleCourseToggle(course._id, isDraft)}
+                        >
+                          <Checkbox
+                            id={`course-${course._id}`}
+                            checked={formData.selectedCourses.includes(course._id)}
+                            onCheckedChange={() => handleCourseToggle(course._id, isDraft)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium flex items-center gap-2 flex-wrap">
+                              <BookOpen className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                              <span className="flex-1">{course.title}</span>
+                              {isDraft && (
+                                <Badge variant="outline" className="text-xs flex-shrink-0 border-orange-500 text-orange-600">
+                                  Draft
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground capitalize mt-1 ml-6">
+                              {course.category.replace('-', ' ')}
+                            </p>
                           </div>
-                          <p className="text-xs text-muted-foreground capitalize mt-1 ml-6">
-                            {course.category.replace('-', ' ')}
-                          </p>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               )}

@@ -94,7 +94,8 @@ export function DepartmentsTab({ organizationId }: DepartmentsTabProps) {
       const response = await fetch(`/api/courses?organizationId=${organizationId}`);
       if (!response.ok) throw new Error('Failed to fetch courses');
       const data = await response.json();
-      setCourses((data.courses || []).filter((c: Course) => c.status === 'published'));
+      // Include all courses (published and draft) for department configuration
+      setCourses(data.courses || []);
     } catch (error: any) {
       console.error('Error fetching courses:', error);
     }
