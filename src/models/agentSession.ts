@@ -15,6 +15,12 @@ export interface IAgentSession extends Document {
     role: 'user' | 'assistant';
     content: string;
     timestamp: Date;
+    attachments?: Array<{
+      name: string;
+      type: string;
+      size: number;
+      assetId: string;
+    }>;
   }>;
   isActive: boolean;
   lastMessageAt: Date;
@@ -41,6 +47,12 @@ const AgentSessionSchema = new Schema<IAgentSession>({
     role: { type: String, enum: ['user', 'assistant'], required: true },
     content: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
+    attachments: [{
+      name: { type: String },
+      type: { type: String },
+      size: { type: Number },
+      assetId: { type: String },
+    }],
   }],
   isActive: { type: Boolean, default: true },
   lastMessageAt: { type: Date, default: Date.now },

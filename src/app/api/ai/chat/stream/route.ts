@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
             userId, // Lyzr ID
             sessionId, // Optional: reuse existing session
             context, // { currentPage, courseId, lessonId }
+            assetIds, // Optional: file attachments
+            attachments, // Optional: file metadata
         } = body;
 
         // Validate required fields
@@ -109,6 +111,8 @@ export async function POST(request: NextRequest) {
             currentPage: contextOptions.currentPage,
             courseId: contextOptions.courseId,
             lessonId: contextOptions.lessonId,
+            assetIds: assetIds || [],
+            attachmentCount: attachments?.length || 0,
         }, null, 2));
 
         // Build dynamic system prompt
@@ -130,7 +134,8 @@ export async function POST(request: NextRequest) {
                 prompt: tutorPrompt,
                 user_id: userId,
             },
-            finalSessionId
+            finalSessionId,
+            assetIds // Pass asset IDs for file attachments
         );
 
         // Create a TransformStream to process the Lyzr stream and collect the full response
@@ -138,6 +143,7 @@ export async function POST(request: NextRequest) {
         const userRef = user;
         const orgId = organizationId;
         const contextRef = context;
+        const attachmentsRef = attachments;
 
         const transformStream = new TransformStream({
             async transform(chunk, controller) {
@@ -177,6 +183,7 @@ export async function POST(request: NextRequest) {
                                 role: 'user',
                                 content: message,
                                 timestamp: new Date(),
+                                attachments: attachmentsRef,
                             },
                             {
                                 role: 'assistant',
@@ -208,6 +215,7 @@ export async function POST(request: NextRequest) {
                                     role: 'user',
                                     content: message,
                                     timestamp: new Date(),
+                                    attachments: attachmentsRef,
                                 },
                                 {
                                     role: 'assistant',

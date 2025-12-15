@@ -542,7 +542,8 @@ export async function streamChatWithAgent(
     message: string,
     userId: string,
     systemPromptVariables: Record<string, any> = {},
-    sessionId?: string
+    sessionId?: string,
+    assetIds: string[] = []
 ): Promise<ReadableStream> {
     const finalSessionId = sessionId || `${agentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -554,6 +555,7 @@ export async function streamChatWithAgent(
         system_prompt_variables: systemPromptVariables,
         filter_variables: {},
         features: [],
+        assets: assetIds,
     };
 
     console.log('Streaming chat request:', JSON.stringify(requestBody, null, 2));
