@@ -10,9 +10,11 @@ interface Department {
   _id: string;
   name: string;
   description?: string;
+  organizationId: string;
   memberCount: number;
   defaultCourseIds: any[];
   autoEnroll: boolean;
+  createdAt: string;
 }
 
 interface DepartmentCardProps {

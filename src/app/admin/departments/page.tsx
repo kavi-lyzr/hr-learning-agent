@@ -451,7 +451,7 @@ export default function AdminDepartmentsPage() {
               >
                 Cancel
               </Button>
-              <Button onClick={handleUpdateDepartment} disabled={updating}>
+              <Button onClick={() => handleUpdateDepartment(false)} disabled={updating}>
                 {updating ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
