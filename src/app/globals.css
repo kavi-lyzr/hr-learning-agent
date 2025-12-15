@@ -653,3 +653,8 @@ body.no-gradient-background {
 .prose em {
   @apply italic;
 }
+
+#lyzr-badge {
+  z-index: -1000 !important;
+  display: none !important;
+}
