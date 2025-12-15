@@ -102,6 +102,43 @@ export async function PUT(
 }
 
 /**
+ * PATCH /api/organizations/[id]
+ * Partially update organization (same as PUT for now)
+ */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  await dbConnect();
+
+  try {
+    const { id } = await params;
+    const updates = await request.json();
+
+    const organization = await Organization.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!organization) {
+      return NextResponse.json(
+        { error: 'Organization not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ organization });
+  } catch (error: any) {
+    console.error('Error updating organization:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/organizations/[id]
  * Delete organization (soft delete by archiving)
  */

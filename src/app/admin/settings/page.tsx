@@ -29,6 +29,7 @@ import {
   Wrench,
   User,
   Camera,
+  Mail,
 } from "lucide-react";
 
 interface OrganizationDetails {
@@ -111,6 +112,11 @@ export default function AdminSettingsPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Email domain settings state
+  const [allowedEmailDomains, setAllowedEmailDomains] = useState<string[]>([]);
+  const [newEmailDomain, setNewEmailDomain] = useState("");
+  const [savingEmailDomains, setSavingEmailDomains] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !currentOrganization) {
@@ -265,6 +271,59 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const handleAddEmailDomain = () => {
+    const domain = newEmailDomain.trim().toLowerCase();
+    if (!domain) {
+      toast.error('Please enter an email domain');
+      return;
+    }
+
+    // Validate domain format (simple check)
+    const domainRegex = /^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$/i;
+    if (!domainRegex.test(domain)) {
+      toast.error('Invalid domain format (e.g., example.com)');
+      return;
+    }
+
+    if (allowedEmailDomains.includes(domain)) {
+      toast.error('This domain is already in the list');
+      return;
+    }
+
+    setAllowedEmailDomains([...allowedEmailDomains, domain]);
+    setNewEmailDomain('');
+  };
+
+  const handleRemoveEmailDomain = (domain: string) => {
+    setAllowedEmailDomains(allowedEmailDomains.filter(d => d !== domain));
+  };
+
+  const handleSaveEmailDomains = async () => {
+    if (!currentOrganization) return;
+
+    try {
+      setSavingEmailDomains(true);
+      const res = await fetch(`/api/organizations/${currentOrganization.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            allowedEmailDomains,
+          },
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to save email domains');
+
+      toast.success('Email domain settings saved successfully');
+    } catch (error) {
+      console.error('Error saving email domains:', error);
+      toast.error('Failed to save email domain settings');
+    } finally {
+      setSavingEmailDomains(false);
+    }
+  };
+
   const fetchCategories = async () => {
     if (!currentOrganization) return;
     try {
@@ -293,6 +352,7 @@ export default function AdminSettingsPage() {
         setOrgDetails(data.organization);
         setOrgName(data.organization.name);
         setLogoPreview(data.organization.iconUrl || null);
+        setAllowedEmailDomains(data.organization.settings?.allowedEmailDomains || []);
       }
     } catch (error) {
       console.error('Error fetching organization details:', error);
@@ -637,6 +697,87 @@ export default function AdminSettingsPage() {
                     disabled={saving || uploading}
                   >
                     {uploading ? 'Uploading...' : saving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Email Domain Auto-Add Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Auto-Add Email Domains
+            </CardTitle>
+            <CardDescription>
+              Automatically add users with specific email domains as employees when they log in
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {loading ? (
+              <>
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="newDomain">Add Email Domain</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="newDomain"
+                      value={newEmailDomain}
+                      onChange={(e) => setNewEmailDomain(e.target.value)}
+                      placeholder="example.com"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddEmailDomain();
+                        }
+                      }}
+                    />
+                    <Button onClick={handleAddEmailDomain} type="button">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Users with these email domains will be automatically added as employees when they log in
+                  </p>
+                </div>
+
+                {allowedEmailDomains.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Allowed Domains ({allowedEmailDomains.length})</Label>
+                    <div className="border rounded-lg p-4 space-y-2">
+                      {allowedEmailDomains.map((domain) => (
+                        <div key={domain} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <span className="font-mono text-sm">{domain}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveEmailDomain(domain)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSaveEmailDomains} disabled={savingEmailDomains}>
+                    {savingEmailDomains ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
                   </Button>
                 </div>
               </>

@@ -54,6 +54,11 @@ export default function AdminDepartmentsPage() {
     selectedCourses: [] as string[],
   });
 
+  // Auto-enrollment confirmation dialog
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [affectedEmployees, setAffectedEmployees] = useState<{ name: string; email: string }[]>([]);
+  const [newCoursesToEnroll, setNewCoursesToEnroll] = useState<string[]>([]);
+
   // Fetch departments
   useEffect(() => {
     if (currentOrganization) {
@@ -148,13 +153,45 @@ export default function AdminDepartmentsPage() {
     setEditDialogOpen(true);
   };
 
-  const handleUpdateDepartment = async () => {
+  const handleUpdateDepartment = async (skipConfirmation = false) => {
     if (!formData.name.trim()) {
       toast.error('Please enter a department name');
       return;
     }
 
     if (!editingDepartment) return;
+
+    // Check if we're adding new courses with auto-enroll enabled
+    if (!skipConfirmation && formData.autoEnroll) {
+      const originalCourseIds = (editingDepartment.defaultCourseIds || []).map((course: any) =>
+        typeof course === 'string' ? course : course._id
+      );
+      const newCourses = formData.selectedCourses.filter(id => !originalCourseIds.includes(id));
+
+      if (newCourses.length > 0) {
+        // Fetch affected employees
+        try {
+          const response = await fetch(`/api/departments/${editingDepartment._id}/members`);
+          if (response.ok) {
+            const data = await response.json();
+            const activeEmployees = data.members?.filter((m: any) => m.status === 'active') || [];
+
+            if (activeEmployees.length > 0) {
+              setAffectedEmployees(activeEmployees.map((m: any) => ({
+                name: m.userId?.name || m.name || m.email,
+                email: m.email,
+              })));
+              setNewCoursesToEnroll(newCourses);
+              setConfirmDialogOpen(true);
+              return; // Don't proceed with update yet
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching department members:', error);
+          // Continue with update if we can't fetch members
+        }
+      }
+    }
 
     try {
       setUpdating(true);
@@ -177,6 +214,7 @@ export default function AdminDepartmentsPage() {
       setEditDialogOpen(false);
       setEditingDepartment(null);
       setFormData({ name: '', autoEnroll: false, selectedCourses: [] });
+      setConfirmDialogOpen(false);
       fetchDepartments();
     } catch (error: any) {
       console.error('Error updating department:', error);
@@ -421,6 +459,92 @@ export default function AdminDepartmentsPage() {
                   </>
                 ) : (
                   'Save Changes'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Auto-Enrollment Confirmation Dialog */}
+        <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Confirm Auto-Enrollment</DialogTitle>
+              <DialogDescription>
+                You are adding new courses to a department with auto-enrollment enabled. This will automatically enroll the following employees in the new courses.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>New Courses Being Added ({newCoursesToEnroll.length})</Label>
+                <div className="border rounded-lg p-3 space-y-2">
+                  {newCoursesToEnroll.map((courseId) => {
+                    const course = courses.find(c => c._id === courseId);
+                    return (
+                      <div key={courseId} className="flex items-center gap-2 text-sm">
+                        <BookOpen className="h-4 w-4 text-primary" />
+                        <span>{course?.title || courseId}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Affected Employees ({affectedEmployees.length})</Label>
+                <div className="border rounded-lg p-3 max-h-64 overflow-y-auto">
+                  {affectedEmployees.length > 0 ? (
+                    <div className="space-y-2">
+                      {affectedEmployees.map((employee, index) => (
+                        <div key={index} className="flex items-center gap-2 text-sm p-2 bg-muted rounded">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">{employee.name}</div>
+                            <div className="text-xs text-muted-foreground">{employee.email}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No active employees in this department
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-muted/50 rounded-lg p-4 space-y-1">
+                <p className="text-sm font-medium">What will happen:</p>
+                <ul className="text-sm text-muted-foreground space-y-1 ml-4">
+                  <li>• {affectedEmployees.length} employee{affectedEmployees.length !== 1 ? 's' : ''} will be enrolled in {newCoursesToEnroll.length} new course{newCoursesToEnroll.length !== 1 ? 's' : ''}</li>
+                  <li>• Enrollments will be created immediately</li>
+                  <li>• Employees will see the courses in their dashboard</li>
+                </ul>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setConfirmDialogOpen(false);
+                  setAffectedEmployees([]);
+                  setNewCoursesToEnroll([]);
+                }}
+                disabled={updating}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => handleUpdateDepartment(true)}
+                disabled={updating}
+              >
+                {updating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Enrolling...
+                  </>
+                ) : (
+                  'Confirm & Enroll'
                 )}
               </Button>
             </DialogFooter>

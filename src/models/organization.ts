@@ -22,11 +22,17 @@ export interface IOrganization extends Document {
   };
   // Custom course categories (defaults to standard categories if empty)
   courseCategories?: string[];
+  // General department (default for employees without department)
+  generalDepartment?: {
+    courseIds: mongoose.Types.ObjectId[]; // Default courses for all employees
+    autoEnroll: boolean; // Auto-enroll all new employees in these courses
+  };
   settings: {
     defaultTheme?: string;
     allowEmployeeSelfEnrollment?: boolean;
     requireQuizPassing?: boolean;
     passingScore?: number; // Default: 70
+    allowedEmailDomains?: string[]; // Auto-add users with these email domains
   };
   createdAt: Date;
   updatedAt: Date;
@@ -55,11 +61,17 @@ const OrganizationSchema = new Schema<IOrganization>({
   },
   // Custom course categories
   courseCategories: [{ type: String }],
+  // General department (default for employees without department)
+  generalDepartment: {
+    courseIds: [{ type: Schema.Types.ObjectId, ref: 'Course' }],
+    autoEnroll: { type: Boolean, default: true },
+  },
   settings: {
     defaultTheme: { type: String, default: 'light' },
     allowEmployeeSelfEnrollment: { type: Boolean, default: false },
     requireQuizPassing: { type: Boolean, default: true },
     passingScore: { type: Number, default: 70 },
+    allowedEmailDomains: [{ type: String }], // Auto-add users with these email domains
   },
   schemaVersion: { type: Number, default: 1 },
 }, {

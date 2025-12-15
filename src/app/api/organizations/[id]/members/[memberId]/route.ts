@@ -26,7 +26,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, role, departmentId, status } = body;
+    const { name, role, departmentId, status, courseIds } = body;
 
     // Build update object
     const updateData: any = {};
@@ -83,6 +83,11 @@ export async function PUT(
       updateData.status = status;
     }
 
+    if (courseIds !== undefined && Array.isArray(courseIds)) {
+      // Update assigned course IDs
+      updateData.assignedCourseIds = courseIds.map((id: string) => new mongoose.Types.ObjectId(id));
+    }
+
     const member = await OrganizationMember.findOneAndUpdate(
       { _id: memberId, organizationId },
       { $set: updateData },
@@ -96,20 +101,23 @@ export async function PUT(
       );
     }
 
-    // Get enrollment stats if employee
+    // Get enrollment stats
     let stats = {
       coursesEnrolled: 0,
       coursesCompleted: 0,
+      coursesInProgress: 0,
       avgProgress: 0,
     };
 
-    if (member.role === 'employee' && member.userId) {
+    if (member.userId) {
+      // For active members with userId, get actual enrollments
       const enrollments = await Enrollment.find({
         userId: member.userId,
         organizationId
       }).lean();
 
       const completed = enrollments.filter(e => e.status === 'completed').length;
+      const inProgress = enrollments.filter(e => e.status === 'in-progress').length;
       const avgProgress = enrollments.length > 0
         ? enrollments.reduce((sum, e) => sum + (e.progressPercentage || 0), 0) / enrollments.length
         : 0;
@@ -117,8 +125,30 @@ export async function PUT(
       stats = {
         coursesEnrolled: enrollments.length,
         coursesCompleted: completed,
+        coursesInProgress: inProgress,
         avgProgress: Math.round(avgProgress),
       };
+    } else if (member.role === 'employee') {
+      // For invited members, count assigned courses
+      let assignedCourseCount = 0;
+
+      // Count directly assigned courses
+      if (member.assignedCourseIds && Array.isArray(member.assignedCourseIds)) {
+        assignedCourseCount = member.assignedCourseIds.length;
+      }
+
+      // Add department default courses if auto-enroll is enabled
+      if (member.departmentId) {
+        const dept = await Department.findById(member.departmentId).lean();
+        if (dept && dept.autoEnroll && dept.defaultCourseIds && Array.isArray(dept.defaultCourseIds)) {
+          // Only add department courses that aren't already in assignedCourseIds
+          const assignedIds = new Set((member.assignedCourseIds || []).map((id: any) => id.toString()));
+          const additionalCourses = dept.defaultCourseIds.filter((id: any) => !assignedIds.has(id.toString()));
+          assignedCourseCount += additionalCourses.length;
+        }
+      }
+
+      stats.coursesEnrolled = assignedCourseCount;
     }
 
     return NextResponse.json({

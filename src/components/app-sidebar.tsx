@@ -56,14 +56,9 @@ const adminNavItems = [
     icon: BookOpen,
   },
   {
-    title: "Employees",
+    title: "People",
     url: "/admin/employees",
     icon: Users,
-  },
-  {
-    title: "Departments",
-    url: "/admin/departments",
-    icon: Building2,
   },
   {
     title: "Analytics",

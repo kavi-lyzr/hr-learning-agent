@@ -34,8 +34,6 @@ import {
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DepartmentsTab } from "@/components/admin/DepartmentsTab";
-import { CourseSelector } from "@/components/admin/CourseSelector";
 
 interface Member {
   _id: string;
@@ -83,9 +81,8 @@ export default function AdminEmployeesPage() {
 
   const [activeTab, setActiveTab] = useState<'employees' | 'departments'>('employees');
   const [members, setMembers] = useState<Member[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]); // Still needed for employee dropdowns
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [organization, setOrganization] = useState<any>(null); // For general department
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -98,6 +95,7 @@ export default function AdminEmployeesPage() {
     departmentId: '',
   });
   const [addEmployeeCourseIds, setAddEmployeeCourseIds] = useState<string[]>([]);
+  const [courseSearchQuery, setCourseSearchQuery] = useState('');
 
   // Bulk upload dialog
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
@@ -126,11 +124,8 @@ export default function AdminEmployeesPage() {
       setLoading(true);
 
       if (activeTab === 'employees') {
-        await Promise.all([
-          fetchMembers(),
-          fetchDepartments(),
-          fetchOrganization(),
-        ]);
+        await fetchMembers();
+        await fetchDepartments(); // Need for department dropdown
       } else {
         await fetchDepartments();
       }
@@ -158,19 +153,6 @@ export default function AdminEmployeesPage() {
     if (!response.ok) throw new Error('Failed to fetch departments');
     const data = await response.json();
     setDepartments(data.departments || []);
-  };
-
-  const fetchOrganization = async () => {
-    if (!currentOrganization) return;
-
-    try {
-      const response = await fetch(`/api/organizations/${currentOrganization.id}`);
-      if (!response.ok) throw new Error('Failed to fetch organization');
-      const data = await response.json();
-      setOrganization(data.organization);
-    } catch (error) {
-      console.error('Error fetching organization:', error);
-    }
   };
 
   const fetchCourses = async () => {
@@ -497,7 +479,7 @@ export default function AdminEmployeesPage() {
           <div>
             <h1 className="text-3xl md:text-4xl font-bold">People Management</h1>
             <p className="text-muted-foreground mt-2">
-              Manage employees, departments, and team structure
+              Manage employees and departments
             </p>
           </div>
         </div>
@@ -664,7 +646,6 @@ export default function AdminEmployeesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="default">No Department</SelectItem>
-                            <SelectItem value="general">General</SelectItem>
                             {departments.map((dept) => (
                               <SelectItem key={dept._id} value={dept._id}>
                                 {dept.name}
@@ -689,22 +670,72 @@ export default function AdminEmployeesPage() {
                             No published courses available
                           </div>
                         ) : (
-                          <CourseSelector
-                            courses={courses}
-                            selectedCourseIds={addEmployeeCourseIds}
-                            onSelectionChange={setAddEmployeeCourseIds}
-                            departmentCourseIds={
-                              employeeForm.departmentId && employeeForm.departmentId !== 'default' && employeeForm.departmentId !== 'general'
-                                ? (departments.find(d => d._id === employeeForm.departmentId)?.defaultCourseIds || []).map((c: any) => c._id || c)
-                                : []
-                            }
-                            generalDepartmentCourseIds={
-                              employeeForm.departmentId === 'general' || !employeeForm.departmentId || employeeForm.departmentId === 'default'
-                                ? (organization?.generalDepartment?.courseIds || []).map((id: any) => id.toString())
-                                : []
-                            }
-                          />
+                          <>
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                placeholder="Search courses..."
+                                value={courseSearchQuery}
+                                onChange={(e) => setCourseSearchQuery(e.target.value)}
+                                className="pl-9"
+                              />
+                            </div>
+                            <ScrollArea className="h-64 border rounded-lg p-4">
+                              <div className="space-y-3">
+                                {courses
+                                  .filter((course) => {
+                                    const query = courseSearchQuery.toLowerCase();
+                                    return (
+                                      course.title.toLowerCase().includes(query) ||
+                                      course.category.toLowerCase().includes(query)
+                                    );
+                                  })
+                                  .map((course) => {
+                                    const isFromDepartment = employeeForm.departmentId &&
+                                      departments
+                                        .find(d => d._id === employeeForm.departmentId)
+                                        ?.defaultCourseIds.some((c: any) => (c._id || c) === course._id);
+
+                                    return (
+                                      <div key={course._id} className="flex items-start gap-3 p-2 rounded hover:bg-muted/50">
+                                        <Checkbox
+                                          id={`add-course-${course._id}`}
+                                          checked={addEmployeeCourseIds.includes(course._id)}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setAddEmployeeCourseIds([...addEmployeeCourseIds, course._id]);
+                                            } else {
+                                              setAddEmployeeCourseIds(addEmployeeCourseIds.filter(id => id !== course._id));
+                                            }
+                                          }}
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <label
+                                            htmlFor={`add-course-${course._id}`}
+                                            className="text-sm font-medium cursor-pointer flex items-center gap-2"
+                                          >
+                                            <BookOpen className="h-4 w-4 flex-shrink-0" />
+                                            <span className="flex-1">{course.title}</span>
+                                            {isFromDepartment && (
+                                              <Badge variant="secondary" className="text-xs">
+                                                From Dept
+                                              </Badge>
+                                            )}
+                                          </label>
+                                          <p className="text-xs text-muted-foreground capitalize mt-1">
+                                            {course.category.replace('-', ' ')}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            </ScrollArea>
+                          </>
                         )}
+                        <p className="text-xs text-muted-foreground">
+                          {addEmployeeCourseIds.length} course(s) selected
+                        </p>
                       </div>
                     </div>
                     <DialogFooter>
@@ -862,8 +893,89 @@ export default function AdminEmployeesPage() {
 
           {/* Departments Tab */}
           <TabsContent value="departments" className="space-y-6">
-            {currentOrganization && (
-              <DepartmentsTab organizationId={currentOrganization.id} />
+            <div className="flex justify-end">
+              <Button className="gap-2" onClick={() => router.push('/admin/departments')}>
+                <Plus className="h-4 w-4" />
+                Create Department
+              </Button>
+            </div>
+
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardHeader>
+                      <Skeleton className="h-6 w-32 mb-2" />
+                      <Skeleton className="h-4 w-full" />
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-20 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : departments.length === 0 ? (
+              <Card className="p-12 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                    <FileText className="h-8 w-8 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">No departments yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Create departments to organize your team
+                    </p>
+                    <Button onClick={() => router.push('/admin/departments')}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Department
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {departments.map((dept) => (
+                  <Card key={dept._id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg">{dept.name}</CardTitle>
+                          {dept.description && (
+                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              {dept.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Members</span>
+                        <span className="font-medium">{dept.memberCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Default Courses</span>
+                        <span className="font-medium">{dept.defaultCourseIds.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Auto-enroll</span>
+                        <Badge variant={dept.autoEnroll ? 'default' : 'secondary'}>
+                          {dept.autoEnroll ? 'Enabled' : 'Disabled'}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => router.push('/admin/departments')}
+                      >
+                        <Edit className="h-3 w-3 mr-2" />
+                        Manage
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </TabsContent>
         </Tabs>
@@ -897,18 +1009,11 @@ export default function AdminEmployeesPage() {
                   <Select
                     value={editingEmployee.departmentId?._id || ''}
                     onValueChange={(value) => {
-                      if (value === 'general') {
-                        setEditingEmployee({
-                          ...editingEmployee,
-                          departmentId: { _id: 'general', name: 'General' }
-                        });
-                      } else {
-                        const dept = departments.find(d => d._id === value);
-                        setEditingEmployee({
-                          ...editingEmployee,
-                          departmentId: dept ? { _id: dept._id, name: dept.name } : undefined
-                        });
-                      }
+                      const dept = departments.find(d => d._id === value);
+                      setEditingEmployee({
+                        ...editingEmployee,
+                        departmentId: dept ? { _id: dept._id, name: dept.name } : undefined
+                      });
                     }}
                   >
                     <SelectTrigger>
@@ -916,7 +1021,6 @@ export default function AdminEmployeesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="default">No Department</SelectItem>
-                      <SelectItem value="general">General</SelectItem>
                       {departments.map((dept) => (
                         <SelectItem key={dept._id} value={dept._id}>
                           {dept.name}
@@ -941,22 +1045,72 @@ export default function AdminEmployeesPage() {
                       No published courses available
                     </div>
                   ) : (
-                    <CourseSelector
-                      courses={courses}
-                      selectedCourseIds={selectedCourseIds}
-                      onSelectionChange={setSelectedCourseIds}
-                      departmentCourseIds={
-                        editingEmployee.departmentId?._id && editingEmployee.departmentId._id !== 'general'
-                          ? (departments.find(d => d._id === editingEmployee.departmentId?._id)?.defaultCourseIds || []).map((c: any) => c._id || c)
-                          : []
-                      }
-                      generalDepartmentCourseIds={
-                        editingEmployee.departmentId?._id === 'general' || !editingEmployee.departmentId
-                          ? (organization?.generalDepartment?.courseIds || []).map((id: any) => id.toString())
-                          : []
-                      }
-                    />
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="Search courses..."
+                          value={courseSearchQuery}
+                          onChange={(e) => setCourseSearchQuery(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                      <ScrollArea className="h-64 border rounded-lg p-4">
+                        <div className="space-y-3">
+                          {courses
+                            .filter((course) => {
+                              const query = courseSearchQuery.toLowerCase();
+                              return (
+                                course.title.toLowerCase().includes(query) ||
+                                course.category.toLowerCase().includes(query)
+                              );
+                            })
+                            .map((course) => {
+                              const isFromDepartment = editingEmployee.departmentId &&
+                                departments
+                                  .find(d => d._id === editingEmployee.departmentId?._id)
+                                  ?.defaultCourseIds.some((c: any) => (c._id || c) === course._id);
+
+                              return (
+                                <div key={course._id} className="flex items-start gap-3 p-2 rounded hover:bg-muted/50">
+                                  <Checkbox
+                                    id={`course-${course._id}`}
+                                    checked={selectedCourseIds.includes(course._id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedCourseIds([...selectedCourseIds, course._id]);
+                                      } else {
+                                        setSelectedCourseIds(selectedCourseIds.filter(id => id !== course._id));
+                                      }
+                                    }}
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <label
+                                      htmlFor={`course-${course._id}`}
+                                      className="text-sm font-medium cursor-pointer flex items-center gap-2"
+                                    >
+                                      <BookOpen className="h-4 w-4 flex-shrink-0" />
+                                      <span className="flex-1">{course.title}</span>
+                                      {isFromDepartment && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          From Dept
+                                        </Badge>
+                                      )}
+                                    </label>
+                                    <p className="text-xs text-muted-foreground capitalize mt-1">
+                                      {course.category.replace('-', ' ')}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </ScrollArea>
+                    </>
                   )}
+                  <p className="text-xs text-muted-foreground">
+                    {selectedCourseIds.length} course(s) selected
+                  </p>
                 </div>
               </div>
               <DialogFooter>
