@@ -8,6 +8,7 @@ export interface IOrganizationMember extends Document {
   role: 'admin' | 'employee';
   status: 'active' | 'invited' | 'inactive';
   departmentId?: mongoose.Types.ObjectId; // Reference to Department
+  assignedCourseIds?: mongoose.Types.ObjectId[]; // Directly assigned courses (for invited members)
   invitedAt?: Date;
   joinedAt?: Date;
   createdAt: Date;
@@ -22,6 +23,7 @@ const OrganizationMemberSchema = new Schema<IOrganizationMember>({
   role: { type: String, enum: ['admin', 'employee'], default: 'employee', required: true },
   status: { type: String, enum: ['active', 'invited', 'inactive'], default: 'invited' },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Department' },
+  assignedCourseIds: [{ type: Schema.Types.ObjectId, ref: 'Course' }],
   invitedAt: { type: Date, default: Date.now },
   joinedAt: { type: Date },
 }, {

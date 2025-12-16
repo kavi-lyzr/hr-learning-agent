@@ -50,6 +50,7 @@ export async function GET(
         iconUrl,
         ownerId: organization.ownerId,
         settings: organization.settings,
+        generalDepartment: organization.generalDepartment,
         memberCount,
         createdAt: organization.createdAt,
         updatedAt: organization.updatedAt,
@@ -69,6 +70,43 @@ export async function GET(
  * Update organization
  */
 export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  await dbConnect();
+
+  try {
+    const { id } = await params;
+    const updates = await request.json();
+
+    const organization = await Organization.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!organization) {
+      return NextResponse.json(
+        { error: 'Organization not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ organization });
+  } catch (error: any) {
+    console.error('Error updating organization:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error', details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/organizations/[id]
+ * Partially update organization (same as PUT for now)
+ */
+export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {

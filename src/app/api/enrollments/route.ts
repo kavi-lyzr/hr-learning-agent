@@ -63,17 +63,25 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Found ${enrollments.length} enrollment(s)`);
 
+    // Check if we should include draft courses (for admin views)
+    const includeDraft = searchParams.get('includeDraft') === 'true';
+
     // Calculate total lessons for each course and convert thumbnails to presigned URLs
+    // Filter out enrollments for draft courses (only show published courses to employees)
     const enrollmentsWithStats = await Promise.all(enrollments.map(async (enrollment: any) => {
       const course = enrollment.courseId;
 
       // Handle case where course was deleted or populate failed
       if (!course) {
         console.warn(`⚠️  Enrollment ${enrollment._id} has no course (courseId: ${enrollment.courseId})`);
-        return {
-          ...enrollment,
-          course: null,
-        };
+        return null; // Exclude from results
+      }
+
+      // Skip draft courses - they shouldn't be visible to employees
+      // But include them for admin views (when includeDraft=true)
+      if (course.status !== 'published' && !includeDraft) {
+        console.log(`⏭️  Skipping draft course: ${course.title}`);
+        return null; // Exclude from results
       }
 
       const totalLessons = course.modules?.reduce(
@@ -106,7 +114,10 @@ export async function GET(request: NextRequest) {
       };
     }));
 
-    return NextResponse.json({ enrollments: enrollmentsWithStats });
+    // Filter out null entries (deleted or draft courses)
+    const validEnrollments = enrollmentsWithStats.filter(e => e !== null);
+
+    return NextResponse.json({ enrollments: validEnrollments });
   } catch (error: any) {
     console.error('Error fetching enrollments:', error);
     return NextResponse.json(

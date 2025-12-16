@@ -1,27 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
+import { useUserProfile, queryKeys } from "@/hooks/use-queries";
 import { toast } from "sonner";
 import {
   User as UserIcon,
   LogOut,
   AlertTriangle,
+  Camera,
+  Loader2,
 } from "lucide-react";
-
-interface UserDetails {
-  email: string;
-  name?: string;
-  lyzrId: string;
-}
 
 interface Membership {
   organizationId: string;
@@ -32,21 +31,32 @@ interface Membership {
 
 export default function AccountSettingsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { currentOrganization, organizations, setCurrentOrganization, refreshOrganizations } = useOrganization();
   const { email, displayName, userId } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [userName, setUserName] = useState("");
   const [memberships, setMemberships] = useState<Membership[]>([]);
 
   useEffect(() => {
+    if (userProfile) {
+      setUserName(userProfile.name || displayName || "");
+    } else if (displayName) {
+      setUserName(displayName);
+    }
+  }, [userProfile, displayName]);
+
+  useEffect(() => {
     if (email) {
-      setUserName(displayName || "");
       fetchMemberships();
     }
-  }, [email, displayName]);
+  }, [email, organizations]);
 
   const fetchMemberships = async () => {
     if (!userId || !email) return;
@@ -69,6 +79,68 @@ export default function AccountSettingsPage() {
     }
   };
 
+  const invalidateUserProfile = () => {
+    if (email) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(email) });
+    }
+  };
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingAvatar(true);
+
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+
+        const res = await fetch(`/api/user/profile`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            email: email,
+            avatarBase64: base64,
+          }),
+        });
+
+        if (res.ok) {
+          toast.success('Avatar updated successfully');
+          // Invalidate the user profile cache to update sidebar
+          invalidateUserProfile();
+        } else {
+          const error = await res.json();
+          toast.error(error.error || 'Failed to upload avatar');
+        }
+        setUploadingAvatar(false);
+      };
+      reader.onerror = () => {
+        toast.error('Failed to read image file');
+        setUploadingAvatar(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      toast.error('Failed to upload avatar');
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSaveName = async () => {
     if (!userId && !email) return;
 
@@ -87,7 +159,8 @@ export default function AccountSettingsPage() {
 
       if (res.ok) {
         toast.success('Name updated successfully');
-        // Optionally refresh auth context
+        // Invalidate the user profile cache to update sidebar
+        invalidateUserProfile();
       } else {
         const error = await res.json();
         toast.error(error.error || 'Failed to update name');
@@ -163,6 +236,57 @@ export default function AccountSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Avatar Section */}
+            <div className="space-y-2">
+              <Label>Profile Picture</Label>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <Avatar className="h-20 w-20">
+                    <AvatarImage src={userProfile?.avatarUrl || undefined} />
+                    <AvatarFallback className="text-2xl">
+                      {userName?.charAt(0)?.toUpperCase() || email?.charAt(0)?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  {uploadingAvatar && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                      <Loader2 className="h-6 w-6 animate-spin text-white" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    aria-label="Upload profile picture"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                  >
+                    {uploadingAvatar ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-4 w-4 mr-2" />
+                        Change Photo
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    JPG, PNG or GIF. Max 5MB.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input

@@ -16,6 +16,8 @@ import {
   RefreshCcw,
   Info,
   Zap,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import {
@@ -42,6 +44,8 @@ import { useAuth } from "@/lib/AuthProvider";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "next-themes";
+import { FeatureRequestDialog } from "@/components/shared/feature-request-dialog";
 
 // Admin navigation items
 const adminNavItems = [
@@ -56,14 +60,9 @@ const adminNavItems = [
     icon: BookOpen,
   },
   {
-    title: "Employees",
+    title: "People",
     url: "/admin/employees",
     icon: Users,
-  },
-  {
-    title: "Departments",
-    url: "/admin/departments",
-    icon: Building2,
   },
   {
     title: "Analytics",
@@ -108,6 +107,25 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
   const { credits, totalCredits, usedCredits, refreshCredits, logout } = useAuth();
   const navItems = role === "admin" ? adminNavItems : employeeNavItems;
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { theme, setTheme } = useTheme();
+
+  const GITHUB_URL = "https://github.com/kavi-lyzr/hr-learning-agent";
+  const APP_SLUG = "HR LMS Agent";
+
+  // Format large numbers to B/M/K format
+  const formatCredits = (num: number | null | undefined): string => {
+    if (!num) return '0';
+    const absNum = Math.abs(num);
+
+    if (absNum >= 1_000_000_000) {
+      return (num / 1_000_000_000).toFixed(2) + 'B';
+    } else if (absNum >= 1_000_000) {
+      return (num / 1_000_000).toFixed(2) + 'M';
+    } else if (absNum >= 1_000) {
+      return (num / 1_000).toFixed(2) + 'K';
+    }
+    return Math.floor(num).toLocaleString();
+  };
 
   useEffect(() => {
     refreshCredits();
@@ -171,6 +189,52 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* Mobile-only quick actions that are hidden from the header */}
+        <SidebarGroup className="md:hidden">
+          <SidebarGroupLabel>Quick Actions</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <FeatureRequestDialog appName={APP_SLUG}>
+                  <SidebarMenuButton asChild>
+                    <button type="button" className="w-full">
+                      <Zap className="h-4 w-4" />
+                      <span>Submit Feedback</span>
+                    </button>
+                  </SidebarMenuButton>
+                </FeatureRequestDialog>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                    <img src="/github.svg" alt="GitHub" className="h-4 w-4 dark:invert" />
+                    <span>GitHub</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                >
+                  {theme === "dark" ? (
+                    <>
+                      <Sun className="h-4 w-4" />
+                      <span>Light Mode</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="h-4 w-4" />
+                      <span>Dark Mode</span>
+                    </>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {role === "admin" && (
           <SidebarGroup>
             <SidebarGroupLabel>Settings</SidebarGroupLabel>
@@ -191,13 +255,15 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
       </SidebarContent>
 
       <SidebarFooter>
-        {/* Credits Section */}
+        {/* Credits Section - Different UI for admin vs employee */}
         <div className="px-3 py-3 space-y-2 border-b">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Credits Left</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {role === "admin" ? "Credits Left" : "Organization Credits"}
+            </span>
             <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-muted-foreground text-right">
-                {Math.floor(credits || 0).toLocaleString()}
+                {formatCredits(credits)}
               </span>
               <button
                 onClick={handleRefreshCredits}
@@ -219,7 +285,9 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
                 <HoverCardContent align="end" className="w-64">
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-sm font-semibold mb-3">Credits Summary</h4>
+                      <h4 className="text-sm font-semibold mb-3">
+                        {role === "admin" ? "Credits Summary" : "Organization Credits"}
+                      </h4>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Total Credits</span>
@@ -255,7 +323,6 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
               </HoverCard>
             </div>
           </div>
-         
           {totalCredits && totalCredits > 0 && (
             <Progress
               value={(credits && credits > 0 ? (credits / totalCredits) * 100 : 0)}

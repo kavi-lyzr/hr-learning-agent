@@ -1,24 +1,80 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
-import { Bot, Send, User, Sparkles } from "lucide-react";
+import { useUserProfile } from "@/hooks/use-queries";
+import {
+  Bot,
+  Send,
+  History,
+  Plus,
+  MessageSquare,
+  Paperclip,
+  X,
+  FileText,
+  Image as ImageIcon,
+} from "lucide-react";
 import { Streamdown } from "streamdown";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 interface Message {
   id: string;
   content: string;
   role: 'user' | 'assistant';
   timestamp: Date;
+  isStreaming?: boolean;
+  attachments?: {
+    name: string;
+    type: string;
+    size: number;
+    url: string;
+  }[];
+}
+
+interface Conversation {
+  _id: string;
+  sessionId: string;
+  lastMessageAt: string;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+    attachments?: Array<{
+      name: string;
+      type: string;
+      size: number;
+      assetId: string;
+    }>;
+  }>;
+  context?: {
+    currentPage?: string;
+    courseId?: string;
+    lessonId?: string;
+  };
 }
 
 export default function EmployeeAIAssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const { currentOrganization } = useOrganization();
-  const { userId } = useAuth();
+  const { userId, email, displayName } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -30,71 +86,283 @@ export default function EmployeeAIAssistantPage() {
   ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [hasReceivedFirstToken, setHasReceivedFirstToken] = useState(false);
 
+  // Auto-scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollAreaRef.current) {
+      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
+    }
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isSending) return;
+  // Fetch conversations
+  const fetchConversations = useCallback(async () => {
+    if (!userId || !currentOrganization) return;
+
+    setIsLoadingConversations(true);
+    try {
+      const response = await fetch(`/api/ai/conversations?userId=${userId}&organizationId=${currentOrganization.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setConversations(data.conversations || []);
+      }
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  }, [userId, currentOrganization]);
+
+  // Load conversations on mount
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
+
+  // Load a previous conversation
+  const loadConversation = useCallback((conversation: Conversation) => {
+    const loadedMessages: Message[] = conversation.messages.map((msg, idx) => ({
+      id: `${conversation._id}-${idx}`,
+      content: msg.content
+        .replace(/\[DONE\]/g, '') // Remove [DONE] markers
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\r/g, '\r')
+        .trim(),
+      role: msg.role,
+      timestamp: new Date(msg.timestamp),
+      attachments: msg.attachments?.map(att => ({
+        name: att.name,
+        type: att.type,
+        size: att.size,
+        url: att.assetId,
+      })),
+    }));
+
+    setMessages(loadedMessages);
+    setSessionId(conversation.sessionId);
+  }, []);
+
+  // Start a new chat
+  const startNewChat = useCallback(() => {
+    setMessages([
+      {
+        id: '1',
+        content: "Hi! I'm your AI Learning Assistant. I can help you with:\n\n- Understanding course content\n- Answering questions about lessons\n- Explaining complex topics\n- Providing learning tips and strategies\n- Tracking your progress\n\nWhat would you like to know?",
+        role: 'assistant',
+        timestamp: new Date(),
+      }
+    ]);
+    setSessionId(null);
+    setSelectedFiles([]);
+  }, []);
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      setSelectedFiles(Array.from(files));
+    }
+  };
+
+  // Remove selected file
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    if ((!input.trim() && selectedFiles.length === 0) || isSending) return;
+
+    // Upload files first if any
+    let uploadedAssetIds: string[] = [];
+    if (selectedFiles.length > 0) {
+      if (!currentOrganization) {
+        console.error('❌ No organization selected');
+        return;
+      }
+
+      setUploadingFiles(true);
+      try {
+        console.log('📎 Uploading', selectedFiles.length, 'files...');
+        for (const file of selectedFiles) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('organizationId', currentOrganization.id);
+
+          const uploadResponse = await fetch('/api/upload-asset', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (uploadResponse.ok) {
+            const uploadData = await uploadResponse.json();
+            console.log('✅ File uploaded:', file.name, '→ Asset IDs:', uploadData.assetIds);
+            uploadedAssetIds.push(...(uploadData.assetIds || []));
+          } else {
+            console.error('❌ Failed to upload file:', file.name, uploadResponse.status);
+          }
+        }
+        console.log('📎 All files uploaded. Total asset IDs:', uploadedAssetIds);
+      } catch (error) {
+        console.error('Error uploading files:', error);
+      } finally {
+        setUploadingFiles(false);
+      }
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       content: input,
       role: 'user',
       timestamp: new Date(),
+      attachments: selectedFiles.map((file, idx) => ({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url: uploadedAssetIds[idx] || '',
+      })),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const aiMessageId = (Date.now() + 1).toString();
+    const aiMessage: Message = {
+      id: aiMessageId,
+      content: '',
+      role: 'assistant',
+      timestamp: new Date(),
+      isStreaming: true,
+    };
+
+    setMessages(prev => [...prev, userMessage, aiMessage]);
     const messageContent = input;
     setInput("");
+    setSelectedFiles([]);
     setIsSending(true);
+    setHasReceivedFirstToken(false);
+
+    abortControllerRef.current = new AbortController();
 
     try {
       if (!currentOrganization || !userId) {
         throw new Error('Please select an organization and sign in');
       }
 
-      const response = await fetch('/api/ai/chat', {
+      const chatPayload = {
+        message: messageContent,
+        organizationId: currentOrganization.id,
+        userId: userId,
+        sessionId: sessionId,
+        assetIds: uploadedAssetIds,
+        attachments: selectedFiles.map((file, idx) => ({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          assetId: uploadedAssetIds[idx] || '',
+        })),
+        context: {
+          currentPage: 'ai-assistant',
+        },
+      };
+
+      const response = await fetch('/api/ai/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: messageContent,
-          organizationId: currentOrganization.id,
-          userId: userId,
-          context: {
-            currentPage: 'ai-assistant',
-          },
-        }),
+        body: JSON.stringify(chatPayload),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
         throw new Error('Failed to get AI response');
       }
 
-      const data = await response.json();
+      const newSessionId = response.headers.get('X-Session-Id');
+      if (newSessionId) {
+        setSessionId(newSessionId);
+      }
 
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: data.response,
-        role: 'assistant',
-        timestamp: new Date(),
-      };
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
 
-      setMessages(prev => [...prev, aiResponse]);
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const content = line.slice(6);
+
+            if (content === '[DONE]' || content.includes('[DONE]')) {
+              setMessages(prev => prev.map(msg =>
+                msg.id === aiMessageId
+                  ? { ...msg, isStreaming: false }
+                  : msg
+              ));
+              // Refresh conversations list
+              fetchConversations();
+            } else if (content && content.trim()) {
+              if (!hasReceivedFirstToken) {
+                setHasReceivedFirstToken(true);
+              }
+              const decodedContent = content
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\r/g, '\r');
+
+              accumulatedContent += decodedContent;
+              setMessages(prev => prev.map(msg =>
+                msg.id === aiMessageId
+                  ? { ...msg, content: accumulatedContent }
+                  : msg
+              ));
+            }
+          }
+        }
+      }
+
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
       console.error('Error getting AI response:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "I'm sorry, I encountered an error. Please try again later.",
-        role: 'assistant',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => prev.map(msg =>
+        msg.id === aiMessageId
+          ? { ...msg, content: "I'm sorry, I encountered an error. Please try again.", isStreaming: false }
+          : msg
+      ));
     } finally {
       setIsSending(false);
+      setHasReceivedFirstToken(false);
+      abortControllerRef.current = null;
     }
-  };
+  }, [input, isSending, currentOrganization, userId, sessionId, selectedFiles, hasReceivedFirstToken, fetchConversations]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -104,158 +372,184 @@ export default function EmployeeAIAssistantPage() {
   };
 
   return (
-    <main className="flex-1 overflow-hidden bg-muted/20 relative w-full h-full">
-      {/* Subtle Grid Background */}
-      <div className="absolute inset-0 pointer-events-none opacity-5">
-        <div className="absolute inset-0 bg-grid-pattern"></div>
-      </div>
+    <main className="flex-1 min-h-0 overflow-hidden w-full flex flex-col">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-muted/20 relative">
+        {/* Header with History and New Chat */}
+        <div className="flex-shrink-0 border-b bg-background/80 backdrop-blur-sm">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={startNewChat}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">New Chat</span>
+            </Button>
 
-      <div className="relative z-10 flex flex-col h-full">
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto px-4 py-8">
-          <div className="max-w-4xl mx-auto space-y-6">
-            {/* Header */}
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                <Sparkles className="h-8 w-8 text-primary" />
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
-                AI Learning Assistant
-              </h1>
-              <p className="text-muted-foreground text-base sm:text-lg">
-                Your personal guide to mastering courses
-              </p>
-            </div>
-
-            {/* Messages */}
-            {messages.map((message, index) => {
-              const isLastMessage = index === messages.length - 1;
-              const isStreaming = isLastMessage && isSending && message.role === 'assistant';
-
-              return (
-                <div
-                  key={message.id}
-                  className={`flex gap-3 sm:gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
                 >
-                  {message.role === 'assistant' && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <History className="h-4 w-4" />
+                  <span className="hidden sm:inline">History</span>
+                </Button>
+              </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel>
+                    Chat History
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <ScrollArea className="h-[300px]">
+                    {isLoadingConversations ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        Loading...
+                      </div>
+                    ) : conversations.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        No previous conversations
+                      </div>
+                    ) : (
+                      conversations.map((conversation) => (
+                        <DropdownMenuItem
+                          key={conversation._id}
+                          className="flex items-start gap-2 p-3 cursor-pointer"
+                          onClick={() => loadConversation(conversation)}
+                        >
+                          <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium line-clamp-2">
+                              {conversation.messages[0]?.content || 'New conversation'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(conversation.lastMessageAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </ScrollArea>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+        {/* Messages Area */}
+        <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
+          <div className="max-w-4xl mx-auto space-y-6 px-4 py-8 pb-4">
+            {messages.filter(msg => !(msg.content === '' && !hasReceivedFirstToken)).map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  "flex gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                )}
+              >
+                {message.role === 'assistant' && (
+                  currentOrganization?.iconUrl ? (
+                    <Avatar className="h-8 w-8 flex-shrink-0">
+                      <AvatarImage src={currentOrganization.iconUrl} alt={currentOrganization.name} />
+                      <AvatarFallback className="bg-primary/10">
+                        <Bot className="h-4 w-4 text-primary" />
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <Bot className="h-4 w-4 text-primary" />
                     </div>
-                  )}
+                  )
+                )}
+
+                <div className="flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] min-w-0">
                   <div
-                    className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/60 border border-border/30 backdrop-blur-sm'
-                      }`}
+                    className={cn(
+                      "rounded-2xl px-4 py-3",
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/60 border border-border/30 backdrop-blur-sm'
+                    )}
                   >
-                    <div className={`text-sm leading-relaxed break-words ${message.role === 'user' ? 'text-primary-foreground' : 'text-foreground'
-                      }`}>
+                    <div className={cn(
+                      "text-sm min-w-0 prose prose-sm dark:prose-invert max-w-none",
+                      "[overflow-wrap:anywhere] [word-break:break-word] [&_*]:max-w-full",
+                      "prose-headings:break-words prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-h1:leading-snug prose-h2:leading-snug",
+                      "prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap",
+                      "[&>*]:my-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+                      message.role === 'user' && 'prose-invert'
+                    )}>
                       {message.role === 'assistant' ? (
                         <Streamdown
                           parseIncompleteMarkdown={true}
-                          isAnimating={isStreaming}
-                          components={{
-                            a: ({ ...props }) => (
-                              <a
-                                {...props}
-                                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-blue-600/50 dark:decoration-blue-400/50 underline-offset-4 transition-colors"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {props.children}
-                                <span className="inline-block ml-1 align-middle">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                                  </svg>
-                                </span>
-                              </a>
-                            ),
-                          }}
+                          isAnimating={message.isStreaming}
                         >
                           {message.content}
                         </Streamdown>
                       ) : (
-                        <Streamdown
-                          parseIncompleteMarkdown={true}
-                          components={{
-                            a: ({ ...props }) => (
-                              <a
-                                {...props}
-                                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-blue-600/50 dark:decoration-blue-400/50 underline-offset-4 transition-colors"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {props.children}
-                                <span className="inline-block ml-1 align-middle">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                                  </svg>
-                                </span>
-                              </a>
-                            ),
-                          }}
-                        >
-                          {message.content}
-                        </Streamdown>
+                        message.content
                       )}
                     </div>
-                    <p className={`text-xs mt-2 ${message.role === 'user'
-                      ? 'text-primary-foreground/60'
-                      : 'text-muted-foreground'
-                      }`}>
-                      {message.timestamp.toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {message.attachments.map((attachment, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs bg-background/50 rounded p-1.5">
+                            {attachment.type.startsWith('image/') ? (
+                              <ImageIcon className="h-3 w-3" />
+                            ) : (
+                              <FileText className="h-3 w-3" />
+                            )}
+                            <span className="truncate">{attachment.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {message.role === 'user' && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  )}
+                  <p className={cn(
+                    "text-xs px-1",
+                    message.role === 'user'
+                      ? 'text-muted-foreground text-right'
+                      : 'text-muted-foreground'
+                  )}>
+                    {message.timestamp.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
                 </div>
-              );
-            })}
 
-            {/* Loading Indicator */}
-            {isSending && (
-              <div className="flex gap-4 justify-start animate-fade-in-up">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Bot className="h-4 w-4 text-primary" />
-                </div>
-                <div className="bg-muted/60 border border-border/30 backdrop-blur-sm rounded-2xl px-4 py-3 max-w-2xl">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                    <span className="text-sm text-muted-foreground">
-                      Thinking...
-                    </span>
+                {message.role === 'user' && (
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarImage src={userProfile?.avatarUrl || undefined} />
+                    <AvatarFallback className="text-xs bg-muted">
+                      {displayName?.charAt(0).toUpperCase() || email?.charAt(0).toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+              </div>
+            ))}
+
+            {/* Thinking indicator */}
+            {isSending && !hasReceivedFirstToken && (
+              <div className="flex gap-3 sm:gap-4 justify-start animate-in fade-in duration-200">
+                {currentOrganization?.iconUrl ? (
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarImage src={currentOrganization.iconUrl} alt={currentOrganization.name} />
+                    <AvatarFallback className="bg-primary/10">
+                      <Bot className="h-4 w-4 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Bot className="h-4 w-4 text-primary" />
+                  </div>
+                )}
+                <div className="bg-muted/60 border border-border/30 backdrop-blur-sm rounded-2xl px-4 py-3">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
                 </div>
               </div>
@@ -263,26 +557,71 @@ export default function EmployeeAIAssistantPage() {
 
             <div ref={messagesEndRef} />
           </div>
-        </div>
+        </ScrollArea>
 
         {/* Input Area - Fixed at bottom */}
-        <div className="border-t bg-background/80 backdrop-blur-sm">
+        <div className="flex-shrink-0 border-t bg-background/80 backdrop-blur-sm">
           <div className="max-w-4xl mx-auto px-4 py-4">
+            {selectedFiles.length > 0 && (
+              <div className="flex gap-2 flex-wrap mb-2">
+                {selectedFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 px-2 py-1.5 bg-muted border border-border rounded-lg text-sm animate-in fade-in slide-in-from-bottom-2 duration-200"
+                  >
+                    {file.type.startsWith('image/') ? (
+                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="truncate max-w-[120px]">{file.name}</span>
+                    <button
+                      onClick={() => removeFile(index)}
+                      className="ml-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <Input
                 placeholder="Ask me anything about your courses..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                disabled={isSending}
-                className="flex-1 h-12 text-base border-2 border-border focus:border-primary rounded-lg"
+                disabled={isSending || uploadingFiles}
+                className="flex-1 h-12 text-base border-2 border-border focus:border-primary"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,image/jpeg,image/jpg,image/png"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
               />
               <Button
-                onClick={handleSend}
-                disabled={!input.trim() || isSending}
-                className="h-12 px-6 flex-shrink-0"
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending || uploadingFiles}
+                className="h-12 w-12 flex-shrink-0"
               >
-                <Send className="h-4 w-4" />
+                <Paperclip className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={handleSend}
+                disabled={(!input.trim() && selectedFiles.length === 0) || isSending || uploadingFiles}
+                size="icon"
+                className="h-12 w-12 flex-shrink-0"
+              >
+                {uploadingFiles ? (
+                  <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center">

@@ -205,6 +205,11 @@ export async function createOrUpdateUser(
     // When an admin invites an employee, an OrganizationMember record is created with email but no userId
     // When that employee logs in, we need to link them to that invitation
     const OrganizationMember = (await import('@/models/organizationMember')).default;
+    const Department = (await import('@/models/department')).default;
+    const Enrollment = (await import('@/models/enrollment')).default;
+    const Course = (await import('@/models/course')).default;
+    const Organization = (await import('@/models/organization')).default;
+    const { sendCourseAssignmentEmail } = await import('@/lib/email-service');
 
     const pendingInvitations = await OrganizationMember.find({
         email: lyzrUser.email.toLowerCase(),
@@ -214,12 +219,209 @@ export async function createOrUpdateUser(
     if (pendingInvitations.length > 0) {
         console.log(`🔗 Found ${pendingInvitations.length} pending invitation(s) for ${lyzrUser.email}`);
 
-        // Link all invitations to this user
+        // Link all invitations to this user and handle auto-enrollment
         for (const invitation of pendingInvitations) {
             invitation.userId = user._id as mongoose.Types.ObjectId;
             invitation.status = 'active'; // Change from 'invited' to 'active'
             await invitation.save();
             console.log(`✅ Linked user to organization: ${invitation.organizationId}`);
+
+            // Auto-enroll in assigned courses (from both direct assignment and department)
+            if (invitation.role === 'employee') {
+                try {
+                    const organization = await Organization.findById(invitation.organizationId);
+                    const coursesToEnroll: Set<string> = new Set();
+
+                    // Collect directly assigned courses
+                    if (invitation.assignedCourseIds && Array.isArray(invitation.assignedCourseIds)) {
+                        invitation.assignedCourseIds.forEach((courseId: mongoose.Types.ObjectId) => {
+                            coursesToEnroll.add(courseId.toString());
+                        });
+                    }
+
+                    // Collect department courses if auto-enroll is enabled
+                    if (invitation.departmentId) {
+                        const department = await Department.findById(invitation.departmentId);
+                        if (department && department.autoEnroll && department.defaultCourseIds?.length > 0) {
+                            department.defaultCourseIds.forEach((courseId: mongoose.Types.ObjectId) => {
+                                coursesToEnroll.add(courseId.toString());
+                            });
+                        }
+                    }
+
+                    if (coursesToEnroll.size > 0) {
+                        console.log(`📚 Auto-enrolling ${lyzrUser.email} in ${coursesToEnroll.size} assigned courses`);
+
+                        for (const courseIdStr of coursesToEnroll) {
+                            const courseId = new mongoose.Types.ObjectId(courseIdStr);
+
+                            // Check if already enrolled
+                            const existingEnrollment = await Enrollment.findOne({
+                                userId: user._id,
+                                courseId: courseId,
+                            });
+
+                            if (existingEnrollment) {
+                                console.log(`⏭️  Already enrolled in course ${courseId}`);
+                                continue;
+                            }
+
+                            // Get course details
+                            const course = await Course.findById(courseId);
+                            if (!course) {
+                                console.warn(`⚠️  Course ${courseId} not found, skipping`);
+                                continue;
+                            }
+
+                            // Create enrollment
+                            const enrollment = new Enrollment({
+                                userId: user._id,
+                                courseId: courseId,
+                                organizationId: invitation.organizationId,
+                                status: 'not-started',
+                                progressPercentage: 0,
+                                progress: {
+                                    completedLessonIds: [],
+                                },
+                                enrolledAt: new Date(),
+                            });
+
+                            await enrollment.save();
+                            console.log(`✅ Auto-enrolled in course: ${course.title}`);
+
+                            // Send course assignment email
+                            try {
+                                const courseLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/employee/courses/${courseId}`;
+                                await sendCourseAssignmentEmail(
+                                    user,
+                                    course,
+                                    courseLink,
+                                    organization?.name
+                                );
+                                console.log(`📧 Course assignment email sent for: ${course.title}`);
+                            } catch (emailError) {
+                                console.error('Failed to send course assignment email:', emailError instanceof Error ? emailError.message : 'Unknown error');
+                                // Don't fail the enrollment if email fails
+                            }
+                        }
+                    }
+                } catch (enrollError) {
+                    console.error('Error during auto-enrollment:', enrollError);
+                    // Don't fail the user activation if enrollment fails
+                }
+            }
+        }
+    }
+
+    // Auto-add user to organizations based on email domain
+    const emailDomain = lyzrUser.email.split('@')[1].toLowerCase();
+    console.log(`🔍 Checking email domain: ${emailDomain} for auto-add`);
+
+    const orgsWithEmailDomain = await Organization.find({
+        'settings.allowedEmailDomains': emailDomain
+    });
+
+    if (orgsWithEmailDomain.length > 0) {
+        console.log(`📧 Found ${orgsWithEmailDomain.length} organization(s) with auto-add enabled for domain: ${emailDomain}`);
+        const { sendWelcomeEmail } = await import('@/lib/email-service');
+
+        for (const organization of orgsWithEmailDomain) {
+            try {
+                // Check if user is already a member
+                const existingMembership = await OrganizationMember.findOne({
+                    organizationId: organization._id,
+                    email: lyzrUser.email.toLowerCase()
+                });
+
+                if (existingMembership) {
+                    console.log(`⏭️  User already a member of organization: ${organization.name}`);
+                    continue;
+                }
+
+                // Create organization member without department (department is optional)
+                const newMember = new OrganizationMember({
+                    organizationId: organization._id,
+                    userId: user._id,
+                    email: lyzrUser.email.toLowerCase(),
+                    name: user.name,
+                    role: 'employee',
+                    status: 'active', // Immediately active since they already logged in
+                    joinedAt: new Date(),
+                });
+
+                await newMember.save();
+                console.log(`✅ Auto-added user to organization: ${organization.name}`);
+
+                // Auto-enroll in general department courses if enabled
+                let enrolledCourses: any[] = [];
+                if (organization.generalDepartment?.autoEnroll && organization.generalDepartment.courseIds.length > 0) {
+                    console.log(`📚 Auto-enrolling user in ${organization.generalDepartment.courseIds.length} general department course(s)`);
+
+                    const Enrollment = (await import('@/models/enrollment')).default;
+                    const Course = (await import('@/models/course')).default;
+
+                    for (const courseId of organization.generalDepartment.courseIds) {
+                        try {
+                            // Check if already enrolled
+                            const existingEnrollment = await Enrollment.findOne({
+                                userId: user._id,
+                                courseId: courseId,
+                            });
+
+                            if (!existingEnrollment) {
+                                const enrollment = new Enrollment({
+                                    userId: user._id,
+                                    courseId: courseId,
+                                    organizationId: organization._id,
+                                    status: 'not-started',
+                                    progressPercentage: 0,
+                                    progress: {
+                                        completedLessonIds: [],
+                                    },
+                                    enrolledAt: new Date(),
+                                });
+
+                                await enrollment.save();
+                                console.log(`✅ Auto-enrolled in general dept course: ${courseId}`);
+                            }
+                        } catch (enrollError) {
+                            console.error(`Error enrolling in course ${courseId}:`, enrollError);
+                            // Continue with other courses
+                        }
+                    }
+
+                    // Fetch course details for welcome email
+                    try {
+                        enrolledCourses = await Course.find({
+                            _id: { $in: organization.generalDepartment.courseIds }
+                        }).select('title').lean();
+                    } catch (error) {
+                        console.error('Error fetching course details:', error);
+                    }
+                }
+
+                // Send welcome email
+                try {
+                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+                    const loginLink = `${baseUrl}/employee/dashboard`;
+                    const { sendWelcomeEmail } = await import('@/lib/email-service');
+
+                    await sendWelcomeEmail(
+                        user.email,
+                        user.name || user.email.split('@')[0],
+                        organization.name,
+                        'General', // Department name
+                        enrolledCourses, // Courses from general department
+                        loginLink
+                    );
+                    console.log(`📧 Welcome email sent for auto-added user to ${organization.name}`);
+                } catch (emailError) {
+                    console.error('Failed to send welcome email for auto-add:', emailError instanceof Error ? emailError.message : 'Unknown error');
+                }
+            } catch (autoAddError) {
+                console.error(`Error auto-adding user to organization ${organization.name}:`, autoAddError);
+                // Don't fail the login if auto-add fails
+            }
         }
     }
 
@@ -470,7 +672,8 @@ export async function streamChatWithAgent(
     message: string,
     userId: string,
     systemPromptVariables: Record<string, any> = {},
-    sessionId?: string
+    sessionId?: string,
+    assetIds: string[] = []
 ): Promise<ReadableStream> {
     const finalSessionId = sessionId || `${agentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -482,6 +685,7 @@ export async function streamChatWithAgent(
         system_prompt_variables: systemPromptVariables,
         filter_variables: {},
         features: [],
+        assets: assetIds,
     };
 
     console.log('Streaming chat request:', JSON.stringify(requestBody, null, 2));

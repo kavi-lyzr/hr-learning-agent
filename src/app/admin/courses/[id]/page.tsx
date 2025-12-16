@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -14,6 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
+import { uploadImageToS3 } from "@/lib/s3-utils";
+import { useOrganization } from "@/lib/OrganizationProvider";
+import { useInvalidateQueries } from "@/hooks/use-queries";
 import {
   ChevronLeft,
   Plus,
@@ -26,6 +30,9 @@ import {
   FileText,
   Loader2,
   Save,
+  Image as ImageIcon,
+  X,
+  Pencil,
 } from "lucide-react";
 
 interface Lesson {
@@ -59,22 +66,47 @@ interface Course {
   description?: string;
   category: string;
   status: string;
+  thumbnailUrl?: string;
   modules: Module[];
   estimatedDuration: number;
   createdAt: string;
   updatedAt: string;
 }
 
+// Default categories - can be overridden by organization settings
+const DEFAULT_CATEGORIES = [
+  { value: 'onboarding', label: 'Onboarding' },
+  { value: 'technical', label: 'Technical' },
+  { value: 'sales', label: 'Sales' },
+  { value: 'soft-skills', label: 'Soft Skills' },
+  { value: 'compliance', label: 'Compliance' },
+  { value: 'other', label: 'Other' },
+];
+
 export default function CourseDetailPage() {
   const router = useRouter();
   const params = useParams();
   const courseId = params.id as string;
+  const { currentOrganization } = useOrganization();
+  const { invalidateCourses } = useInvalidateQueries();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [openModules, setOpenModules] = useState<Set<string>>(new Set());
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+
+  // Course details editing state
+  const [editDetailsDialogOpen, setEditDetailsDialogOpen] = useState(false);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [courseDetailsForm, setCourseDetailsForm] = useState({
+    title: '',
+    description: '',
+    category: '',
+    thumbnailUrl: '',
+    thumbnailPreview: '',
+  });
 
   // Module dialog state
   const [moduleDialogOpen, setModuleDialogOpen] = useState(false);
@@ -95,6 +127,7 @@ export default function CourseDetailPage() {
 
   useEffect(() => {
     fetchCourse();
+    fetchCategories();
   }, [courseId]);
 
   // Warn before leaving with unsaved changes
@@ -109,6 +142,22 @@ export default function CourseDetailPage() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasChanges]);
+
+  const fetchCategories = async () => {
+    if (!currentOrganization) return;
+    try {
+      const response = await fetch(`/api/organizations/${currentOrganization.id}/categories`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.categories && data.categories.length > 0) {
+          setCategories(data.categories.map((c: string) => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1).replace('-', ' ') })));
+        }
+      }
+    } catch (error) {
+      // Fall back to default categories
+      console.log('Using default categories');
+    }
+  };
 
   const fetchCourse = async () => {
     try {
@@ -130,6 +179,99 @@ export default function CourseDetailPage() {
     }
   };
 
+  const handleOpenEditDetails = () => {
+    if (!course) return;
+    setCourseDetailsForm({
+      title: course.title,
+      description: course.description || '',
+      category: course.category,
+      thumbnailUrl: course.thumbnailUrl || '',
+      thumbnailPreview: course.thumbnailUrl || '',
+    });
+    setEditDetailsDialogOpen(true);
+  };
+
+  const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingThumbnail(true);
+
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+
+      const base64Image = await base64Promise;
+      setCourseDetailsForm(prev => ({ ...prev, thumbnailPreview: base64Image }));
+
+      const s3Url = await uploadImageToS3(base64Image, `course-${courseId}-${Date.now()}.${file.name.split('.').pop()}`);
+      setCourseDetailsForm(prev => ({ ...prev, thumbnailUrl: s3Url, thumbnailPreview: base64Image }));
+      toast.success('Thumbnail uploaded successfully!');
+    } catch (error: any) {
+      console.error('Error uploading thumbnail:', error);
+      toast.error('Failed to upload thumbnail');
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  };
+
+  const handleRemoveThumbnail = () => {
+    setCourseDetailsForm(prev => ({ ...prev, thumbnailUrl: '', thumbnailPreview: '' }));
+  };
+
+  const handleSaveCourseDetails = async () => {
+    if (!course || !courseDetailsForm.title.trim()) {
+      toast.error('Please enter a course title');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await fetch(`/api/courses/${courseId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: courseDetailsForm.title,
+          description: courseDetailsForm.description,
+          category: courseDetailsForm.category,
+          thumbnailUrl: courseDetailsForm.thumbnailUrl || undefined,
+          status: course.status,
+          modules: course.modules,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to save course');
+
+      const data = await response.json();
+      setCourse(data.course);
+      setEditDetailsDialogOpen(false);
+      toast.success('Course details updated successfully!');
+
+      // Invalidate courses cache so the list shows updated data
+      if (currentOrganization) {
+        invalidateCourses(currentOrganization.id);
+      }
+    } catch (error: any) {
+      console.error('Error saving course details:', error);
+      toast.error('Failed to save course details');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveCourse = async () => {
     if (!course) return;
 
@@ -142,6 +284,7 @@ export default function CourseDetailPage() {
           title: course.title,
           description: course.description,
           category: course.category,
+          thumbnailUrl: course.thumbnailUrl,
           status: course.status,
           modules: course.modules,
         }),
@@ -153,6 +296,11 @@ export default function CourseDetailPage() {
       setCourse(data.course);
       setHasChanges(false);
       toast.success('Course saved successfully!');
+
+      // Invalidate courses cache so the list shows updated data
+      if (currentOrganization) {
+        invalidateCourses(currentOrganization.id);
+      }
     } catch (error: any) {
       console.error('Error saving course:', error);
       toast.error('Failed to save course');
@@ -329,38 +477,72 @@ export default function CourseDetailPage() {
             </Link>
           </Button>
 
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold mb-2">{course.title}</h1>
-              <p className="text-muted-foreground">{course.description || 'No description'}</p>
-              <div className="flex items-center gap-4 mt-4">
-                <Badge variant={course.status === 'published' ? 'default' : 'secondary'}>
-                  {course.status}
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {course.modules.length} modules • {course.modules.reduce((sum, m) => sum + m.lessons.length, 0)} lessons • {course.estimatedDuration} min
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {hasChanges && (
-                <Badge variant="outline" className="text-orange-600 border-orange-600">
-                  Unsaved changes
-                </Badge>
+          {/* Course Header with Thumbnail */}
+          <div className="flex gap-6">
+            {/* Thumbnail */}
+            <div className="relative w-48 h-32 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-primary/20 via-primary/10 to-secondary">
+              {course.thumbnailUrl ? (
+                <img
+                  src={course.thumbnailUrl}
+                  alt={course.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageIcon className="h-10 w-10 text-primary/40" />
+                </div>
               )}
-              <Button onClick={saveCourse} disabled={!hasChanges || saving}>
-                {saving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Course
-                  </>
-                )}
-              </Button>
+            </div>
+
+            {/* Course Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h1 className="text-3xl font-bold truncate">{course.title}</h1>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 flex-shrink-0"
+                      onClick={handleOpenEditDetails}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-muted-foreground line-clamp-2">{course.description || 'No description'}</p>
+                  <div className="flex items-center gap-4 mt-3">
+                    <Badge variant={course.status === 'published' ? 'default' : 'secondary'}>
+                      {course.status}
+                    </Badge>
+                    <Badge variant="outline" className="capitalize">
+                      {course.category.replace('-', ' ')}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {course.modules.length} modules • {course.modules.reduce((sum, m) => sum + m.lessons.length, 0)} lessons • {course.estimatedDuration} min
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {hasChanges && (
+                    <Badge variant="outline" className="text-orange-600 border-orange-600">
+                      Unsaved changes
+                    </Badge>
+                  )}
+                  <Button onClick={saveCourse} disabled={!hasChanges || saving}>
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Course
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -371,7 +553,7 @@ export default function CourseDetailPage() {
             <CardTitle>Course Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 w-full">
               <div>
                 <Label className="text-sm text-muted-foreground">Category</Label>
                 <p className="font-medium capitalize">{course.category.replace('-', ' ')}</p>
@@ -512,7 +694,8 @@ export default function CourseDetailPage() {
                             {module.lessons.map((lesson, lessonIndex) => (
                               <div
                                 key={lesson._id}
-                                className="flex items-center gap-4 p-3 rounded-lg border hover:bg-accent/50 transition-colors"
+                                className="flex items-center gap-4 p-3 rounded-lg border hover:bg-accent/50 transition-colors group cursor-pointer"
+                                onClick={() => handleEditLesson(module._id!, lesson)}
                               >
                                 <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                                 <div className="flex items-center gap-2">
@@ -523,7 +706,7 @@ export default function CourseDetailPage() {
                                   )}
                                 </div>
                                 <div className="flex-1">
-                                  <div className="font-medium">
+                                  <div className="font-medium group-hover:text-primary transition-colors">
                                     {lessonIndex + 1}. {lesson.title}
                                   </div>
                                   {lesson.description && (
@@ -536,7 +719,7 @@ export default function CourseDetailPage() {
                                   <span>{lesson.duration} min</span>
                                   {lesson.hasQuiz && <Badge variant="secondary">Quiz</Badge>}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -575,49 +758,160 @@ export default function CourseDetailPage() {
             </div>
           )}
         </div>
-
-        {/* Module Dialog */}
-        <Dialog open={moduleDialogOpen} onOpenChange={setModuleDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingModule ? 'Edit Module' : 'Add New Module'}</DialogTitle>
-              <DialogDescription>
-                {editingModule ? 'Update module details' : 'Create a new learning module'}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="module-title">Module Title</Label>
-                <Input
-                  id="module-title"
-                  placeholder="e.g., Introduction to Sales"
-                  value={moduleFormData.title}
-                  onChange={(e) => setModuleFormData({ ...moduleFormData, title: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="module-description">Description (optional)</Label>
-                <Textarea
-                  id="module-description"
-                  placeholder="Brief overview of what this module covers..."
-                  rows={3}
-                  value={moduleFormData.description}
-                  onChange={(e) => setModuleFormData({ ...moduleFormData, description: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setModuleDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveModule}>
-                {editingModule ? 'Update Module' : 'Add Module'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
-    </main>
+
+      {/* Edit Course Details Dialog */}
+      <Dialog open={editDetailsDialogOpen} onOpenChange={setEditDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Course Details</DialogTitle>
+            <DialogDescription>
+              Update course information and thumbnail
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="course-title">Course Title</Label>
+              <Input
+                id="course-title"
+                placeholder="e.g., Sales Training 101"
+                value={courseDetailsForm.title}
+                onChange={(e) => setCourseDetailsForm({ ...courseDetailsForm, title: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="course-description">Description</Label>
+              <Textarea
+                id="course-description"
+                placeholder="Brief description of what this course covers..."
+                rows={3}
+                value={courseDetailsForm.description}
+                onChange={(e) => setCourseDetailsForm({ ...courseDetailsForm, description: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Course Thumbnail</Label>
+              {courseDetailsForm.thumbnailPreview ? (
+                <div className="relative w-full h-40 border rounded-lg overflow-hidden group">
+                  <img
+                    src={courseDetailsForm.thumbnailPreview}
+                    alt="Thumbnail preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveThumbnail}
+                    className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  {uploadingThumbnail && (
+                    <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    {uploadingThumbnail ? (
+                      <Loader2 className="h-10 w-10 mb-3 text-muted-foreground animate-spin" />
+                    ) : (
+                      <ImageIcon className="h-10 w-10 mb-3 text-muted-foreground" />
+                    )}
+                    <p className="mb-2 text-sm text-muted-foreground">
+                      <span className="font-semibold">Click to upload</span> or drag and drop
+                    </p>
+                    <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 5MB</p>
+                  </div>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleThumbnailChange}
+                    disabled={uploadingThumbnail}
+                  />
+                </label>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="course-category">Category</Label>
+              <Select
+                value={courseDetailsForm.category}
+                onValueChange={(value) => setCourseDetailsForm({ ...courseDetailsForm, category: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDetailsDialogOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveCourseDetails} disabled={saving || uploadingThumbnail}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Module Dialog */}
+      <Dialog open={moduleDialogOpen} onOpenChange={setModuleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingModule ? 'Edit Module' : 'Add New Module'}</DialogTitle>
+            <DialogDescription>
+              {editingModule ? 'Update module details' : 'Create a new learning module'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="module-title">Module Title</Label>
+              <Input
+                id="module-title"
+                placeholder="e.g., Introduction to Sales"
+                value={moduleFormData.title}
+                onChange={(e) => setModuleFormData({ ...moduleFormData, title: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="module-description">Description (optional)</Label>
+              <Textarea
+                id="module-description"
+                placeholder="Brief overview of what this module covers..."
+                rows={3}
+                value={moduleFormData.description}
+                onChange={(e) => setModuleFormData({ ...moduleFormData, description: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModuleDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveModule}>
+              {editingModule ? 'Update Module' : 'Add Module'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </main >
   );
 }
 

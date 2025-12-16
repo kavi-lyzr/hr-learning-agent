@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/AuthProvider";
 import { OrganizationProvider } from "@/lib/OrganizationProvider";
+import { QueryProvider } from "@/lib/QueryProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 const geistSans = Geist({
@@ -58,14 +59,16 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <OrganizationProvider>
-              <main className="w-full min-w-full">
-                {children}
-                <Toaster />
-              </main>
-            </OrganizationProvider>
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <OrganizationProvider>
+                <main className="w-full min-w-full">
+                  {children}
+                  <Toaster />
+                </main>
+              </OrganizationProvider>
+            </AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

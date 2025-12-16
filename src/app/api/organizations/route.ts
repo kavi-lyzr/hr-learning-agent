@@ -41,14 +41,29 @@ export async function GET(request: Request) {
       .populate('organizationId')
       .exec();
 
-    const organizations = memberships.map((m: any) => ({
-      id: m.organizationId._id,
-      name: m.organizationId.name,
-      slug: m.organizationId.slug,
-      iconUrl: m.organizationId.iconUrl,
-      role: m.role,
-      status: m.status,
-      joinedAt: m.joinedAt,
+    // Map organizations with signed icon URLs
+    const organizations = await Promise.all(memberships.map(async (m: any) => {
+      let signedIconUrl = m.organizationId.iconUrl;
+
+      // Sign S3 URLs for organization icons
+      if (signedIconUrl && isS3Url(signedIconUrl)) {
+        try {
+          signedIconUrl = await getSignedImageUrl(signedIconUrl);
+        } catch (error) {
+          console.error('Failed to sign org icon URL:', error);
+          signedIconUrl = null;
+        }
+      }
+
+      return {
+        id: m.organizationId._id,
+        name: m.organizationId.name,
+        slug: m.organizationId.slug,
+        iconUrl: signedIconUrl,
+        role: m.role,
+        status: m.status,
+        joinedAt: m.joinedAt,
+      };
     }));
 
     return NextResponse.json({ organizations });
@@ -111,6 +126,10 @@ export async function POST(request: Request) {
       name,
       slug,
       ownerId: user._id, // Use MongoDB _id, not lyzrId
+      generalDepartment: {
+        courseIds: [],
+        autoEnroll: true,
+      },
     });
     await organization.save();
 
@@ -136,8 +155,8 @@ export async function POST(request: Request) {
     });
     await membership.save();
 
-    // Create default departments
-    const defaultDepartments = [
+    // Create standard departments
+    const standardDepartments = [
       'Sales',
       'Engineering',
       'Product',
@@ -145,20 +164,21 @@ export async function POST(request: Request) {
       'HR',
     ];
 
-    console.log(`Creating ${defaultDepartments.length} default departments for organization: ${organization._id}`);
+    console.log(`Creating ${standardDepartments.length} standard departments for organization: ${organization._id}`);
 
-    const departmentPromises = defaultDepartments.map((deptName) =>
+    const departmentPromises = standardDepartments.map((deptName) =>
       new Department({
         organizationId: organization._id,
         name: deptName,
         description: '',
         defaultCourseIds: [],
         autoEnroll: false,
+        isDefault: false,
       }).save()
     );
 
     await Promise.all(departmentPromises);
-    console.log(`Default departments created successfully`);
+    console.log(`All departments created successfully`);
 
     // Update user's lastAccessedOrganization
     await User.findByIdAndUpdate(user._id, {

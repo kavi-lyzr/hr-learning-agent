@@ -23,6 +23,7 @@ import {
   XCircle,
   AlertCircle,
 } from "lucide-react";
+import { BreadcrumbNav } from "@/components/BreadcrumbNav";
 
 interface QuizQuestion {
   questionText: string;
@@ -178,15 +179,15 @@ export default function LessonViewerPage() {
       let shouldComplete = false;
 
       if (lesson.contentType === 'video' && videoDuration > 0) {
-        // Complete when 90% watched
+        // Complete when 5% watched (relaxed significantly - fake timer can't track actual playback)
         const progress = watchTime / videoDuration;
-        if (progress >= 0.9) {
+        if (progress >= 0.05) {
           shouldComplete = true;
         }
       } else if (lesson.contentType === 'article' || lesson.contentType === 'video-article') {
         // For articles or video-article lessons, just check article scroll
-        // Complete when 80% scrolled (or 100% if no scrolling needed)
-        if (scrollDepth >= 80) {
+        // Complete when 60% scrolled (relaxed from 80%, or 100% if no scrolling needed)
+        if (scrollDepth >= 60) {
           shouldComplete = true;
         }
       }
@@ -296,13 +297,13 @@ export default function LessonViewerPage() {
     }
   };
 
-  const markAsComplete = async () => {
-    if (isCompleted) return;
-
-    setIsCompleted(true);
-    await saveProgress(true);
-    toast.success('Lesson completed!');
-  };
+    const markAsComplete = async () => {
+      if (isCompleted) return;
+  
+      setIsCompleted(true);
+      await saveProgress(true);
+      // Note: Toast removed per user request - completion shown via UI badge instead
+    };
 
   const getYouTubeEmbedUrl = (url: string) => {
     // Convert various YouTube URL formats to embed format
@@ -454,19 +455,19 @@ export default function LessonViewerPage() {
   }
 
   return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full bg-muted/20">
-      <div className="max-w-5xl mx-auto space-y-6">
-        {/* Back Button */}
-        <Button
-          variant="ghost"
-          className="gap-2"
-          onClick={() => router.push(`/employee/courses/${courseId}`)}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Course
-        </Button>
+    <>
+      {/* Sticky Breadcrumb Navigation */}
+      <BreadcrumbNav
+        items={[
+          { label: 'My Courses', href: '/employee/courses' },
+          { label: course?.title || 'Course', href: `/employee/courses/${courseId}` },
+          { label: lesson.title },
+        ]}
+      />
 
-        {/* Lesson Header */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full bg-muted/20">
+        <div className="max-w-5xl mx-auto space-y-6">
+          {/* Lesson Header */}
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
@@ -536,7 +537,7 @@ export default function LessonViewerPage() {
             <CardContent className="p-0">
               <div
                 ref={articleRef}
-                className="prose prose-sm md:prose-base lg:prose-lg max-w-none p-6 md:p-8 lg:p-12 overflow-y-auto max-h-[600px]"
+                className="prose max-w-none p-6 md:p-8 lg:p-12 overflow-y-auto max-h-[600px]"
                 dangerouslySetInnerHTML={{ __html: lesson.content.articleHtml }}
               />
             </CardContent>
@@ -561,7 +562,7 @@ export default function LessonViewerPage() {
                   <span className="font-medium">Progress</span>
                   {lesson.contentType === 'video' ? (
                     <span className="text-muted-foreground">
-                      {videoDuration > 0 ? Math.round((watchTime / videoDuration) * 100) : 0}% watched (90% to complete)
+                      {videoDuration > 0 ? Math.round((watchTime / videoDuration) * 100) : 0}% watched (5% to complete)
                     </span>
                   ) : (
                     <span className="text-muted-foreground">
@@ -579,7 +580,7 @@ export default function LessonViewerPage() {
                 />
                 {(lesson.contentType === 'article' || lesson.contentType === 'video-article') && (
                   <p className="text-xs text-muted-foreground">
-                    {scrollDepth >= 80 ? 'Ready to complete!' : 'Read to 80% to complete'}
+                    {scrollDepth >= 60 ? 'Ready to complete!' : 'Read to 60% to complete'}
                   </p>
                 )}
               </div>
@@ -781,9 +782,9 @@ export default function LessonViewerPage() {
                                     key={oIndex}
                                     className={`p-2 rounded text-sm ${
                                       oIndex === question.correctAnswerIndex
-                                        ? 'bg-green-50 border border-green-200 text-green-900'
+                                        ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-900 dark:text-green-100'
                                         : oIndex === userAnswer && !isCorrect
-                                        ? 'bg-red-50 border border-red-200 text-red-900'
+                                        ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-900 dark:text-red-100'
                                         : 'bg-muted/30'
                                     }`}
                                   >
@@ -802,9 +803,9 @@ export default function LessonViewerPage() {
                               </div>
 
                               {/* Explanation */}
-                              <div className="pl-7 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
-                                <p className="font-semibold text-blue-900 mb-1">Explanation:</p>
-                                <p className="text-blue-800">{question.explanation}</p>
+                              <div className="pl-7 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-sm">
+                                <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">Explanation:</p>
+                                <p className="text-blue-800 dark:text-blue-200">{question.explanation}</p>
                               </div>
                             </div>
                           </CardContent>
@@ -855,5 +856,6 @@ export default function LessonViewerPage() {
         </div>
       </div>
     </main>
+    </>
   );
 }

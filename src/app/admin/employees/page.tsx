@@ -33,6 +33,9 @@ import {
   BookOpen,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DepartmentsTab } from "@/components/admin/DepartmentsTab";
+import { CourseSelector } from "@/components/admin/CourseSelector";
 
 interface Member {
   _id: string;
@@ -49,7 +52,9 @@ interface Member {
     name?: string;
     email: string;
     lyzrId: string;
+    avatarUrl?: string;
   };
+  assignedCourseIds?: any[]; // For invited employees - courses assigned before account creation
   coursesEnrolled: number;
   coursesCompleted: number;
   avgProgress: number;
@@ -76,14 +81,15 @@ interface Course {
 export default function AdminEmployeesPage() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  
+
   const [activeTab, setActiveTab] = useState<'employees' | 'departments'>('employees');
   const [members, setMembers] = useState<Member[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]); // Still needed for employee dropdowns
   const [courses, setCourses] = useState<Course[]>([]);
+  const [organization, setOrganization] = useState<any>(null); // For general department
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Add employee dialog
   const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
   const [addingEmployee, setAddingEmployee] = useState(false);
@@ -92,6 +98,7 @@ export default function AdminEmployeesPage() {
     name: '',
     departmentId: '',
   });
+  const [addEmployeeCourseIds, setAddEmployeeCourseIds] = useState<string[]>([]);
 
   // Bulk upload dialog
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
@@ -118,10 +125,13 @@ export default function AdminEmployeesPage() {
 
     try {
       setLoading(true);
-      
+
       if (activeTab === 'employees') {
-        await fetchMembers();
-        await fetchDepartments(); // Need for department dropdown
+        await Promise.all([
+          fetchMembers(),
+          fetchDepartments(),
+          fetchOrganization(),
+        ]);
       } else {
         await fetchDepartments();
       }
@@ -135,7 +145,7 @@ export default function AdminEmployeesPage() {
 
   const fetchMembers = async () => {
     if (!currentOrganization) return;
-    
+
     const response = await fetch(`/api/organizations/${currentOrganization.id}/members`);
     if (!response.ok) throw new Error('Failed to fetch members');
     const data = await response.json();
@@ -151,13 +161,27 @@ export default function AdminEmployeesPage() {
     setDepartments(data.departments || []);
   };
 
+  const fetchOrganization = async () => {
+    if (!currentOrganization) return;
+
+    try {
+      const response = await fetch(`/api/organizations/${currentOrganization.id}`);
+      if (!response.ok) throw new Error('Failed to fetch organization');
+      const data = await response.json();
+      setOrganization(data.organization);
+    } catch (error) {
+      console.error('Error fetching organization:', error);
+    }
+  };
+
   const fetchCourses = async () => {
     if (!currentOrganization) return;
 
     const response = await fetch(`/api/organizations/${currentOrganization.id}/courses`);
     if (!response.ok) throw new Error('Failed to fetch courses');
     const data = await response.json();
-    setCourses(data.courses?.filter((c: Course) => c.status === 'published') || []);
+    // Include all courses (published and draft) for assignment
+    setCourses(data.courses || []);
   };
 
   const handleAddEmployee = async () => {
@@ -178,6 +202,7 @@ export default function AdminEmployeesPage() {
           name: employeeForm.name,
           role: 'employee',
           departmentId: employeeForm.departmentId || undefined,
+          courseIds: addEmployeeCourseIds.length > 0 ? addEmployeeCourseIds : undefined,
         }),
       });
 
@@ -189,6 +214,7 @@ export default function AdminEmployeesPage() {
       toast.success('Employee added successfully!');
       setAddEmployeeOpen(false);
       setEmployeeForm({ email: '', name: '', departmentId: '' });
+      setAddEmployeeCourseIds([]);
       fetchMembers();
     } catch (error: any) {
       console.error('Error adding employee:', error);
@@ -208,7 +234,7 @@ export default function AdminEmployeesPage() {
 
     try {
       setBulkUploading(true);
-      
+
       // Parse CSV data
       const lines = csvData.trim().split('\n');
       const members = lines.slice(1).map(line => {
@@ -260,11 +286,11 @@ export default function AdminEmployeesPage() {
       }
     }
 
-    // Fetch current enrollments for this employee
+    // For active employees: Fetch current enrollments (including draft courses for admin view)
     if (member.userId?.lyzrId && currentOrganization) {
       try {
         const response = await fetch(
-          `/api/enrollments?userId=${member.userId.lyzrId}&organizationId=${currentOrganization.id}`
+          `/api/enrollments?userId=${member.userId.lyzrId}&organizationId=${currentOrganization.id}&includeDraft=true`
         );
         if (response.ok) {
           const data = await response.json();
@@ -281,6 +307,19 @@ export default function AdminEmployeesPage() {
       } catch (error) {
         console.error('Error fetching enrollments:', error);
       }
+    } else {
+      // For invited employees: Load from assignedCourseIds
+      const assignedCourses = (member.assignedCourseIds || []).map((id: any) => {
+        // Handle both ObjectId objects and strings
+        if (typeof id === 'string') return id;
+        if (id._id) return id._id;
+        if (id.toString) return id.toString();
+        return id;
+      });
+
+      console.log('📋 Loading assigned courses for invited employee:', assignedCourses);
+      setCurrentEnrollments(assignedCourses);
+      setSelectedCourseIds(assignedCourses);
     }
   };
 
@@ -289,24 +328,6 @@ export default function AdminEmployeesPage() {
 
     try {
       setUpdating(true);
-
-      // Update employee basic info
-      const response = await fetch(
-        `/api/organizations/${currentOrganization.id}/members/${editingEmployee._id}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: editingEmployee.name,
-            departmentId: editingEmployee.departmentId?._id || null,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update employee');
-      }
 
       // Handle auto-enrollment if department changed
       const departmentChanged = originalDepartmentId !== (editingEmployee.departmentId?._id || null);
@@ -321,9 +342,50 @@ export default function AdminEmployeesPage() {
         }
       }
 
-      // Handle enrollment changes if userId exists
+      // For active employees: update basic info only, handle enrollments separately
+      // For invited employees: update basic info AND assigned courses together
       if (editingEmployee.userId?.lyzrId) {
+        // Active employee - update basic info only
+        const response = await fetch(
+          `/api/organizations/${currentOrganization.id}/members/${editingEmployee._id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: editingEmployee.name,
+              departmentId: editingEmployee.departmentId?._id || null,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to update employee');
+        }
+
+        // Handle enrollment changes for active employees
         await handleEnrollmentChanges(editingEmployee.userId.lyzrId, finalSelectedCourses);
+      } else {
+        // Invited employee - update basic info AND assigned courses
+        const response = await fetch(
+          `/api/organizations/${currentOrganization.id}/members/${editingEmployee._id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: editingEmployee.name,
+              departmentId: editingEmployee.departmentId?._id || null,
+              courseIds: finalSelectedCourses, // Send course assignments for invited employees
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to update employee');
+        }
+
+        console.log(`✅ Updated invited employee with ${finalSelectedCourses.length} assigned courses`);
       }
 
       toast.success('Employee updated successfully!');
@@ -460,7 +522,7 @@ export default function AdminEmployeesPage() {
     URL.revokeObjectURL(url);
   };
 
-  const filteredMembers = members.filter(member => 
+  const filteredMembers = members.filter(member =>
     member.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     member.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -473,7 +535,7 @@ export default function AdminEmployeesPage() {
           <div>
             <h1 className="text-3xl md:text-4xl font-bold">People Management</h1>
             <p className="text-muted-foreground mt-2">
-              Manage employees and departments
+              Manage employees, departments, and team structure
             </p>
           </div>
         </div>
@@ -590,14 +652,19 @@ export default function AdminEmployeesPage() {
                   </DialogContent>
                 </Dialog>
 
-                <Dialog open={addEmployeeOpen} onOpenChange={setAddEmployeeOpen}>
+                <Dialog open={addEmployeeOpen} onOpenChange={(open) => {
+                  setAddEmployeeOpen(open);
+                  if (open && courses.length === 0) {
+                    fetchCourses();
+                  }
+                }}>
                   <DialogTrigger asChild>
                     <Button className="gap-2">
                       <Plus className="h-4 w-4" />
                       Add Employee
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Add New Employee</DialogTitle>
                       <DialogDescription>
@@ -635,6 +702,7 @@ export default function AdminEmployeesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="default">No Department</SelectItem>
+                            <SelectItem value="general">General</SelectItem>
                             {departments.map((dept) => (
                               <SelectItem key={dept._id} value={dept._id}>
                                 {dept.name}
@@ -642,6 +710,39 @@ export default function AdminEmployeesPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {employeeForm.departmentId && departments.find(d => d._id === employeeForm.departmentId)?.autoEnroll && (
+                          <p className="text-xs text-muted-foreground">
+                            This department has auto-enroll enabled. Department courses will be added automatically.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Assign Courses (optional)</Label>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Select courses to assign to this employee
+                        </p>
+                        {courses.length === 0 ? (
+                          <div className="text-sm text-muted-foreground p-4 border rounded-lg text-center">
+                            No published courses available
+                          </div>
+                        ) : (
+                          <CourseSelector
+                            courses={courses}
+                            selectedCourseIds={addEmployeeCourseIds}
+                            onSelectionChange={setAddEmployeeCourseIds}
+                            departmentCourseIds={
+                              employeeForm.departmentId && employeeForm.departmentId !== 'default' && employeeForm.departmentId !== 'general'
+                                ? (departments.find(d => d._id === employeeForm.departmentId)?.defaultCourseIds || []).map((c: any) => c._id || c)
+                                : []
+                            }
+                            generalDepartmentCourseIds={
+                              employeeForm.departmentId === 'general' || !employeeForm.departmentId || employeeForm.departmentId === 'default'
+                                ? (organization?.generalDepartment?.courseIds || []).map((id: any) => typeof id === 'string' ? id : id.toString())
+                                : []
+                            }
+                          />
+                        )}
                       </div>
                     </div>
                     <DialogFooter>
@@ -670,7 +771,7 @@ export default function AdminEmployeesPage() {
                 <CardContent className="p-6">
                   <div className="space-y-4">
                     {[1, 2, 3, 4, 5].map((i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
+                      <Skeleton key={i} className="h-20 w-full" />
                     ))}
                   </div>
                 </CardContent>
@@ -694,70 +795,94 @@ export default function AdminEmployeesPage() {
                 </div>
               </Card>
             ) : (
-              <Card>
+              <Card className="overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Courses</TableHead>
-                      <TableHead>Progress</TableHead>
+                    <TableRow className="hover:bg-transparent border-b-2">
+                      <TableHead className="font-semibold">Employee</TableHead>
+                      <TableHead className="font-semibold">Department</TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">Courses Enrolled</TableHead>
+                      <TableHead className="font-semibold">Overall Progress</TableHead>
                       <TableHead className="w-[70px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredMembers.map((member) => (
-                      <TableRow key={member._id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{member.name || 'Not set'}</div>
-                            <div className="text-sm text-muted-foreground">{member.email}</div>
+                      <TableRow key={member._id} className="hover:bg-muted/50 transition-colors">
+                        <TableCell className="py-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 border-2 border-border">
+                              <AvatarImage src={member.userId?.avatarUrl || ''} alt={member.name || member.email} />
+                              <AvatarFallback className="text-sm font-medium bg-primary/10 text-primary">
+                                {(member.name || member.email || 'U').charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="font-medium text-base truncate">
+                                {member.name || <span className="text-muted-foreground">Not set</span>}
+                              </div>
+                              <div className="text-sm text-muted-foreground truncate">{member.email}</div>
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-4">
                           {member.departmentId ? (
-                            <Badge variant="outline">{member.departmentId.name}</Badge>
+                            <Badge variant="outline" className="font-medium">
+                              {member.departmentId.name}
+                            </Badge>
                           ) : (
-                            <span className="text-muted-foreground text-sm">No department</span>
+                            <span className="text-muted-foreground text-sm">—</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-4">
                           <Badge
                             variant={
                               member.status === 'active' ? 'default' :
-                              member.status === 'invited' ? 'secondary' :
-                              'outline'
+                                member.status === 'invited' ? 'secondary' :
+                                  'outline'
                             }
+                            className="capitalize font-medium"
                           >
                             {member.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {member.coursesCompleted} / {member.coursesEnrolled}
-                          </div>
-                        </TableCell>
-                        <TableCell>
+                        <TableCell className="py-4">
                           <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium">{member.avgProgress}%</div>
+                            <BookOpen className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">
+                              {member.coursesCompleted} <span className="text-muted-foreground">/ {member.coursesEnrolled}</span>
+                            </span>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-4">
+                          <div className="flex items-center gap-3 min-w-[140px]">
+                            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(member.avgProgress, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-medium tabular-nums w-10 text-right">
+                              {member.avgProgress}%
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted">
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditEmployee(member)}>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => handleEditEmployee(member)} className="cursor-pointer">
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => handleDeleteEmployee(member._id)}
-                                className="text-destructive"
+                                className="text-destructive cursor-pointer focus:text-destructive"
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Remove
@@ -775,89 +900,8 @@ export default function AdminEmployeesPage() {
 
           {/* Departments Tab */}
           <TabsContent value="departments" className="space-y-6">
-            <div className="flex justify-end">
-              <Button className="gap-2" onClick={() => router.push('/admin/departments')}>
-                <Plus className="h-4 w-4" />
-                Create Department
-              </Button>
-            </div>
-
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[1, 2, 3].map((i) => (
-                  <Card key={i}>
-                    <CardHeader>
-                      <Skeleton className="h-6 w-32 mb-2" />
-                      <Skeleton className="h-4 w-full" />
-                    </CardHeader>
-                    <CardContent>
-                      <Skeleton className="h-20 w-full" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : departments.length === 0 ? (
-              <Card className="p-12 text-center">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-                    <FileText className="h-8 w-8 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">No departments yet</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Create departments to organize your team
-                    </p>
-                    <Button onClick={() => router.push('/admin/departments')}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create Department
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {departments.map((dept) => (
-                  <Card key={dept._id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg">{dept.name}</CardTitle>
-                          {dept.description && (
-                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                              {dept.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Members</span>
-                        <span className="font-medium">{dept.memberCount}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Default Courses</span>
-                        <span className="font-medium">{dept.defaultCourseIds.length}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Auto-enroll</span>
-                        <Badge variant={dept.autoEnroll ? 'default' : 'secondary'}>
-                          {dept.autoEnroll ? 'Enabled' : 'Disabled'}
-                        </Badge>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => router.push('/admin/departments')}
-                      >
-                        <Edit className="h-3 w-3 mr-2" />
-                        Manage
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+            {currentOrganization && (
+              <DepartmentsTab organizationId={currentOrganization.id} />
             )}
           </TabsContent>
         </Tabs>
@@ -891,11 +935,18 @@ export default function AdminEmployeesPage() {
                   <Select
                     value={editingEmployee.departmentId?._id || ''}
                     onValueChange={(value) => {
-                      const dept = departments.find(d => d._id === value);
-                      setEditingEmployee({
-                        ...editingEmployee,
-                        departmentId: dept ? { _id: dept._id, name: dept.name } : undefined
-                      });
+                      if (value === 'general') {
+                        setEditingEmployee({
+                          ...editingEmployee,
+                          departmentId: { _id: 'general', name: 'General' }
+                        });
+                      } else {
+                        const dept = departments.find(d => d._id === value);
+                        setEditingEmployee({
+                          ...editingEmployee,
+                          departmentId: dept ? { _id: dept._id, name: dept.name } : undefined
+                        });
+                      }
                     }}
                   >
                     <SelectTrigger>
@@ -903,6 +954,7 @@ export default function AdminEmployeesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="default">No Department</SelectItem>
+                      <SelectItem value="general">General</SelectItem>
                       {departments.map((dept) => (
                         <SelectItem key={dept._id} value={dept._id}>
                           {dept.name}
@@ -927,53 +979,22 @@ export default function AdminEmployeesPage() {
                       No published courses available
                     </div>
                   ) : (
-                    <ScrollArea className="h-64 border rounded-lg p-4">
-                      <div className="space-y-3">
-                        {courses.map((course) => {
-                          const isFromDepartment = editingEmployee.departmentId &&
-                            departments
-                              .find(d => d._id === editingEmployee.departmentId?._id)
-                              ?.defaultCourseIds.some((c: any) => (c._id || c) === course._id);
-
-                          return (
-                            <div key={course._id} className="flex items-start gap-3 p-2 rounded hover:bg-muted/50">
-                              <Checkbox
-                                id={`course-${course._id}`}
-                                checked={selectedCourseIds.includes(course._id)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setSelectedCourseIds([...selectedCourseIds, course._id]);
-                                  } else {
-                                    setSelectedCourseIds(selectedCourseIds.filter(id => id !== course._id));
-                                  }
-                                }}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <label
-                                  htmlFor={`course-${course._id}`}
-                                  className="text-sm font-medium cursor-pointer flex items-center gap-2"
-                                >
-                                  <BookOpen className="h-4 w-4 flex-shrink-0" />
-                                  <span className="flex-1">{course.title}</span>
-                                  {isFromDepartment && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      From Dept
-                                    </Badge>
-                                  )}
-                                </label>
-                                <p className="text-xs text-muted-foreground capitalize mt-1">
-                                  {course.category.replace('-', ' ')}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </ScrollArea>
+                    <CourseSelector
+                      courses={courses}
+                      selectedCourseIds={selectedCourseIds}
+                      onSelectionChange={setSelectedCourseIds}
+                      departmentCourseIds={
+                        editingEmployee.departmentId?._id && editingEmployee.departmentId._id !== 'general'
+                          ? (departments.find(d => d._id === editingEmployee.departmentId?._id)?.defaultCourseIds || []).map((c: any) => c._id || c)
+                          : []
+                      }
+                      generalDepartmentCourseIds={
+                        editingEmployee.departmentId?._id === 'general' || !editingEmployee.departmentId
+                          ? (organization?.generalDepartment?.courseIds || []).map((id: any) => typeof id === 'string' ? id : id.toString())
+                          : []
+                      }
+                    />
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    {selectedCourseIds.length} course(s) selected
-                  </p>
                 </div>
               </div>
               <DialogFooter>

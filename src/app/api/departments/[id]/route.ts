@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Department from '@/models/department';
 import OrganizationMember from '@/models/organizationMember';
+import Enrollment from '@/models/enrollment';
+import Course from '@/models/course';
 import mongoose from 'mongoose';
 
 /**
@@ -145,6 +147,16 @@ export async function PUT(
       updateData.autoEnroll = Boolean(autoEnroll);
     }
 
+    // Get the original department state before update
+    const originalDepartment = await Department.findById(id);
+    if (!originalDepartment) {
+      return NextResponse.json(
+        { error: 'Department not found' },
+        { status: 404 }
+      );
+    }
+
+    // Update the department
     const department = await Department.findByIdAndUpdate(
       id,
       { $set: updateData },
@@ -156,6 +168,62 @@ export async function PUT(
         { error: 'Department not found' },
         { status: 404 }
       );
+    }
+
+    // If autoEnroll is enabled and new courses were added, enroll existing active employees
+    if (department.autoEnroll && defaultCourseIds !== undefined) {
+      const originalCourseIds = originalDepartment.defaultCourseIds.map((id: any) => id.toString());
+      const newCourseIds = defaultCourseIds.filter((id: string) => !originalCourseIds.includes(id));
+
+      if (newCourseIds.length > 0) {
+        console.log(`🔄 Auto-enrolling existing employees in ${newCourseIds.length} new courses`);
+
+        // Get all active employees in this department
+        const activeMembers = await OrganizationMember.find({
+          departmentId: id,
+          status: 'active',
+          userId: { $exists: true },
+          role: 'employee'
+        });
+
+        console.log(`👥 Found ${activeMembers.length} active employees to enroll`);
+
+        // Enroll each employee in the new courses
+        for (const member of activeMembers) {
+          for (const courseIdStr of newCourseIds) {
+            const courseId = new mongoose.Types.ObjectId(courseIdStr);
+
+            // Check if already enrolled
+            const existingEnrollment = await Enrollment.findOne({
+              userId: member.userId,
+              courseId: courseId,
+            });
+
+            if (existingEnrollment) {
+              console.log(`⏭️  ${member.email} already enrolled in course ${courseId}`);
+              continue;
+            }
+
+            // Create enrollment
+            const enrollment = new Enrollment({
+              userId: member.userId,
+              courseId: courseId,
+              organizationId: originalDepartment.organizationId,
+              status: 'not-started',
+              progressPercentage: 0,
+              progress: {
+                completedLessonIds: [],
+              },
+              enrolledAt: new Date(),
+            });
+
+            await enrollment.save();
+            console.log(`✅ Auto-enrolled ${member.email} in course ${courseId}`);
+          }
+        }
+
+        console.log(`✨ Auto-enrollment complete for department: ${department.name}`);
+      }
     }
 
     // Get member count

@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
+import { useUserProfile } from "@/hooks/use-queries";
 
 export default function AccountLayout({
   children,
@@ -16,6 +17,7 @@ export default function AccountLayout({
   const router = useRouter();
   const { currentOrganization, isLoading } = useOrganization();
   const { email, displayName } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
 
   // Determine role based on current route (fallback to employee)
   const pathname = usePathname();
@@ -28,8 +30,9 @@ export default function AccountLayout({
         <AppSidebar
           role={role}
           user={{
-            name: displayName || undefined,
+            name: userProfile?.name || displayName || undefined,
             email: email || undefined,
+            avatarUrl: userProfile?.avatarUrl,
           }}
           organization={currentOrganization ? {
             name: currentOrganization.name,

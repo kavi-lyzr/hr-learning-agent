@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Course from '@/models/course';
 import User from '@/models/user';
-import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
+import { getSignedImageUrl, isS3Url, cleanS3Url } from '@/lib/s3-utils';
 
 /**
  * GET /api/courses?organizationId=xxx
@@ -31,9 +31,11 @@ export async function GET(request: NextRequest) {
     const coursesWithStats = await Promise.all(courses.map(async (course: any) => {
       // Convert thumbnail to presigned URL if it's an S3 URL
       let thumbnailUrl = course.thumbnailUrl;
-      if (thumbnailUrl && isS3Url(thumbnailUrl)) {
+      if (thumbnailUrl && thumbnailUrl.includes('.s3.') && thumbnailUrl.includes('.amazonaws.com')) {
         try {
-          thumbnailUrl = await getSignedImageUrl(thumbnailUrl);
+          // Clean the URL first (remove old signatures), then get fresh signed URL
+          const cleanUrl = cleanS3Url(thumbnailUrl);
+          thumbnailUrl = await getSignedImageUrl(cleanUrl);
         } catch (error) {
           console.error('Error getting signed URL for thumbnail:', error);
         }
@@ -87,12 +89,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Create course with empty modules array
+    // Clean thumbnail URL before storing (remove any query params/signatures)
+    const cleanedThumbnailUrl = thumbnailUrl ? cleanS3Url(thumbnailUrl) : undefined;
+    
     const course = new Course({
       organizationId,
       title,
       description: description || '',
       category: category || 'other',
-      thumbnailUrl: thumbnailUrl || undefined,
+      thumbnailUrl: cleanedThumbnailUrl,
       status: 'draft',
       modules: [],
       estimatedDuration: 0,

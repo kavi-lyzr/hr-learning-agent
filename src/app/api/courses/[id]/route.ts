@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Course from '@/models/course';
+import Enrollment from '@/models/enrollment';
 import mongoose from 'mongoose';
-import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
+import { getSignedImageUrl, cleanS3Url } from '@/lib/s3-utils';
 
 /**
  * GET /api/courses/[id]
@@ -36,9 +37,11 @@ export async function GET(
     }
 
     // Convert thumbnail to presigned URL if it's an S3 URL
-    if (course.thumbnailUrl && isS3Url(course.thumbnailUrl)) {
+    if (course.thumbnailUrl && course.thumbnailUrl.includes('.s3.') && course.thumbnailUrl.includes('.amazonaws.com')) {
       try {
-        course.thumbnailUrl = await getSignedImageUrl(course.thumbnailUrl);
+        // Clean the URL first (remove old signatures), then get fresh signed URL
+        const cleanUrl = cleanS3Url(course.thumbnailUrl);
+        course.thumbnailUrl = await getSignedImageUrl(cleanUrl);
       } catch (error) {
         console.error('Error getting signed URL for thumbnail:', error);
       }
@@ -106,7 +109,8 @@ export async function PUT(
     if (description !== undefined) updateData.description = description;
     if (category !== undefined) updateData.category = category;
     if (status !== undefined) updateData.status = status;
-    if (thumbnailUrl !== undefined) updateData.thumbnailUrl = thumbnailUrl;
+    // Clean thumbnail URL before storing (remove any query params/signatures)
+    if (thumbnailUrl !== undefined) updateData.thumbnailUrl = cleanS3Url(thumbnailUrl);
     if (modules !== undefined) {
       // Clean temp IDs from modules and lessons
       updateData.modules = cleanTempIds(modules);
@@ -130,6 +134,21 @@ export async function PUT(
         { error: 'Course not found' },
         { status: 404 }
       );
+    }
+
+    // If modules were updated, recalculate all enrollments for this course
+    if (modules !== undefined) {
+      await recalculateEnrollmentProgress(id, course);
+    }
+
+    // Convert thumbnail to presigned URL for response
+    if (course.thumbnailUrl && course.thumbnailUrl.includes('.s3.') && course.thumbnailUrl.includes('.amazonaws.com')) {
+      try {
+        const cleanUrl = cleanS3Url(course.thumbnailUrl);
+        (course as any).thumbnailUrl = await getSignedImageUrl(cleanUrl);
+      } catch (error) {
+        console.error('Error getting signed URL for thumbnail:', error);
+      }
     }
 
     return NextResponse.json({ course });
@@ -183,5 +202,79 @@ export async function DELETE(
       { error: 'Internal Server Error', details: error.message },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Helper function to recalculate enrollment progress for all users enrolled in a course.
+ * This is called when modules/lessons are added or removed from a course.
+ */
+async function recalculateEnrollmentProgress(courseId: string, course: any) {
+  try {
+    // Get all lesson IDs from the updated course
+    const allLessonIds = new Set<string>();
+    course.modules?.forEach((module: any) => {
+      module.lessons?.forEach((lesson: any) => {
+        if (lesson._id) {
+          allLessonIds.add(lesson._id.toString());
+        }
+      });
+    });
+    
+    const totalLessons = allLessonIds.size;
+    console.log(`📊 Course ${courseId} now has ${totalLessons} lessons`);
+
+    // Find all enrollments for this course
+    const enrollments = await Enrollment.find({ courseId });
+    console.log(`🔄 Recalculating progress for ${enrollments.length} enrollment(s)`);
+
+    for (const enrollment of enrollments) {
+      const previousProgress = enrollment.progressPercentage;
+      const previousStatus = enrollment.status;
+      
+      // Filter completed lessons to only include lessons that still exist in the course
+      const validCompletedLessonIds = enrollment.progress.completedLessonIds.filter(
+        (lessonId: mongoose.Types.ObjectId) => allLessonIds.has(lessonId.toString())
+      );
+      
+      // Update completedLessonIds to only include valid lessons
+      enrollment.progress.completedLessonIds = validCompletedLessonIds;
+      
+      // Recalculate progress percentage
+      const completedCount = validCompletedLessonIds.length;
+      enrollment.progressPercentage = totalLessons > 0
+        ? Math.round((completedCount / totalLessons) * 100)
+        : 0;
+
+      // Update status based on new progress
+      if (enrollment.progressPercentage === 0 && completedCount === 0) {
+        // If no lessons completed and was previously completed, reset to not-started
+        if (enrollment.status === 'completed') {
+          enrollment.status = 'not-started';
+          enrollment.completedAt = undefined;
+        }
+      } else if (enrollment.progressPercentage < 100 && enrollment.status === 'completed') {
+        // If progress dropped below 100%, change back to in-progress
+        enrollment.status = 'in-progress';
+        enrollment.completedAt = undefined;
+      } else if (enrollment.progressPercentage === 100 && enrollment.status !== 'completed') {
+        // If now at 100%, mark as completed
+        enrollment.status = 'completed';
+        enrollment.completedAt = new Date();
+      }
+
+      await enrollment.save();
+      
+      if (previousProgress !== enrollment.progressPercentage || previousStatus !== enrollment.status) {
+        console.log(
+          `   📈 User ${enrollment.userId}: ${previousProgress}% (${previousStatus}) → ${enrollment.progressPercentage}% (${enrollment.status})`
+        );
+      }
+    }
+
+    console.log(`✅ Progress recalculation complete`);
+  } catch (error) {
+    console.error('Error recalculating enrollment progress:', error);
+    // Don't throw - this is a non-critical operation
   }
 }

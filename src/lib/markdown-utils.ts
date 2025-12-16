@@ -2,8 +2,16 @@
  * Markdown Conversion Utilities
  *
  * Converts markdown to HTML for use with TipTap editor.
- * For production, consider using a library like 'marked' or 'remark'.
+ * Uses 'marked' library for robust markdown parsing.
  */
+
+import { marked } from 'marked';
+
+// Configure marked for safe HTML output with GFM support
+marked.setOptions({
+  gfm: true, // GitHub Flavored Markdown (tables, strikethrough, etc.)
+  breaks: true, // Convert \n to <br>
+});
 
 /**
  * Convert markdown to HTML

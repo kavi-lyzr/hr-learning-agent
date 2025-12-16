@@ -6,6 +6,7 @@ export interface IDepartment extends Document {
   description?: string;
   defaultCourseIds: mongoose.Types.ObjectId[]; // Courses auto-assigned to new members
   autoEnroll: boolean; // Whether to auto-enroll new members
+  isDefault: boolean; // Whether this is the default department (cannot be deleted)
   memberCount?: number; // Virtual field for UI
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +38,11 @@ const DepartmentSchema = new Schema<IDepartment>({
   autoEnroll: {
     type: Boolean,
     default: true
+  },
+  isDefault: {
+    type: Boolean,
+    default: false,
+    index: true
   }
 }, {
   timestamps: true

@@ -23,13 +23,15 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { LogOut, ChevronDown, Moon, Sun, Eye } from "lucide-react";
+import { LogOut, ChevronDown, Moon, Sun, MessageSquarePlus } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/AuthProvider";
 import { useOrganization } from "@/lib/OrganizationProvider";
+import { useUserProfile } from "@/hooks/use-queries";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FeatureRequestDialog } from "./shared/feature-request-dialog";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface SiteHeaderProps {
   breadcrumbs?: Array<{ label: string; href?: string }>;
@@ -40,13 +42,11 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { email, displayName, logout, userId } = useAuth();
+  const { email, displayName, logout } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
   const [isAdminView, setIsAdminView] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [isRequestOpen, setIsRequestOpen] = useState(false);
   const [requestEmail, setRequestEmail] = useState<string>("");
-  const [requestMessage, setRequestMessage] = useState<string>("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const GITHUB_URL = "https://github.com/kavi-lyzr/hr-learning-agent";
   const APP_SLUG = "HR LMS Agent";
@@ -102,9 +102,11 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 max-h-16 h-16">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
+      <div className="container mx-auto px-2 sm:px-4 h-16 flex items-center justify-between gap-3">
         {/* Left: Breadcrumbs or Organization Name */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Mobile hamburger */}
+          <SidebarTrigger className="md:hidden" />
           {breadcrumbs && breadcrumbs.length > 0 ? (
             <Breadcrumb>
               <BreadcrumbList>
@@ -155,8 +157,8 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
         <div className="flex items-center gap-2">
           {/* Request Feature */}
           <FeatureRequestDialog appName={APP_SLUG}>
-            <Button variant="outline" size="sm" className="h-9">
-              Request Feature
+            <Button variant="ghost" size="icon" className="h-9 w-9 hidden md:inline-flex" title="Request Feature">
+              <MessageSquarePlus className="h-4 w-4" />
             </Button>
           </FeatureRequestDialog>
 
@@ -164,7 +166,7 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9"
+            className="h-9 w-9 hidden md:inline-flex"
             asChild
             disabled={!GITHUB_URL}
             title="Open GitHub"
@@ -180,7 +182,8 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
-            className="h-9 w-9"
+            className="h-9 w-9 hidden md:inline-flex"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? (
               <Sun className="h-4 w-4" />
@@ -189,18 +192,36 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
             )}
           </Button>
 
-          {/* View Toggle (Admin Only) */}
+          {/* View Toggle (Admin Only) - Tab Style */}
           {organization && organization.role === 'admin' && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-muted/50">
-              <Eye className="h-4 w-4 text-muted-foreground" />
-              <Switch
-                checked={isAdminView}
-                onCheckedChange={toggleView}
-                className="data-[state=checked]:bg-primary"
+            <div className="relative hidden sm:flex items-center gap-1 p-1 rounded-lg border bg-muted/30">
+              {/* Sliding Background */}
+              <div
+                className={`absolute top-1 bottom-1 ${ isAdminView ? "w-2/5" : "w-[55%]"} bg-background dark:bg-muted shadow-sm rounded-md transition-all duration-300 ease-out text-center`}
+                style={{ left: isAdminView ? '4px' : 'calc(43% + 0px)' }}
               />
-              <Label className="text-xs font-medium cursor-pointer" onClick={toggleView}>
-                {isAdminView ? 'Admin' : 'Employee'}
-              </Label>
+
+              {/* Admin Tab */}
+              <button
+                onClick={() => !isAdminView && toggleView()}
+                title="Switch to Admin View"
+                className={`relative z-10 px-3 py-1.5 pr-2 text-xs font-medium rounded-md transition-colors duration-200 text-center w-2/5 ${
+                  isAdminView ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Admin
+              </button>
+
+              {/* Employee Tab */}
+              <button
+                onClick={() => isAdminView && toggleView()}
+                title="Switch to Employee View"
+                className={`relative z-10 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 w-3/5 ${
+                  !isAdminView ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Employee
+              </button>
             </div>
           )}
 
@@ -209,7 +230,7 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 pr-3 pl-0">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src="" />
+                  <AvatarImage src={userProfile?.avatarUrl || undefined} />
                   <AvatarFallback className="text-xs bg-muted">
                     {userDisplayName.charAt(0).toUpperCase()}
                   </AvatarFallback>
