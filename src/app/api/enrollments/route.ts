@@ -63,6 +63,9 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ Found ${enrollments.length} enrollment(s)`);
 
+    // Check if we should include draft courses (for admin views)
+    const includeDraft = searchParams.get('includeDraft') === 'true';
+
     // Calculate total lessons for each course and convert thumbnails to presigned URLs
     // Filter out enrollments for draft courses (only show published courses to employees)
     const enrollmentsWithStats = await Promise.all(enrollments.map(async (enrollment: any) => {
@@ -75,7 +78,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Skip draft courses - they shouldn't be visible to employees
-      if (course.status !== 'published') {
+      // But include them for admin views (when includeDraft=true)
+      if (course.status !== 'published' && !includeDraft) {
         console.log(`⏭️  Skipping draft course: ${course.title}`);
         return null; // Exclude from results
       }

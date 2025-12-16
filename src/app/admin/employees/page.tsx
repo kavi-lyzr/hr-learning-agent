@@ -54,6 +54,7 @@ interface Member {
     lyzrId: string;
     avatarUrl?: string;
   };
+  assignedCourseIds?: any[]; // For invited employees - courses assigned before account creation
   coursesEnrolled: number;
   coursesCompleted: number;
   avgProgress: number;
@@ -285,11 +286,11 @@ export default function AdminEmployeesPage() {
       }
     }
 
-    // Fetch current enrollments for this employee
+    // For active employees: Fetch current enrollments (including draft courses for admin view)
     if (member.userId?.lyzrId && currentOrganization) {
       try {
         const response = await fetch(
-          `/api/enrollments?userId=${member.userId.lyzrId}&organizationId=${currentOrganization.id}`
+          `/api/enrollments?userId=${member.userId.lyzrId}&organizationId=${currentOrganization.id}&includeDraft=true`
         );
         if (response.ok) {
           const data = await response.json();
@@ -306,6 +307,19 @@ export default function AdminEmployeesPage() {
       } catch (error) {
         console.error('Error fetching enrollments:', error);
       }
+    } else {
+      // For invited employees: Load from assignedCourseIds
+      const assignedCourses = (member.assignedCourseIds || []).map((id: any) => {
+        // Handle both ObjectId objects and strings
+        if (typeof id === 'string') return id;
+        if (id._id) return id._id;
+        if (id.toString) return id.toString();
+        return id;
+      });
+
+      console.log('📋 Loading assigned courses for invited employee:', assignedCourses);
+      setCurrentEnrollments(assignedCourses);
+      setSelectedCourseIds(assignedCourses);
     }
   };
 
@@ -314,24 +328,6 @@ export default function AdminEmployeesPage() {
 
     try {
       setUpdating(true);
-
-      // Update employee basic info
-      const response = await fetch(
-        `/api/organizations/${currentOrganization.id}/members/${editingEmployee._id}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: editingEmployee.name,
-            departmentId: editingEmployee.departmentId?._id || null,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update employee');
-      }
 
       // Handle auto-enrollment if department changed
       const departmentChanged = originalDepartmentId !== (editingEmployee.departmentId?._id || null);
@@ -346,9 +342,50 @@ export default function AdminEmployeesPage() {
         }
       }
 
-      // Handle enrollment changes if userId exists
+      // For active employees: update basic info only, handle enrollments separately
+      // For invited employees: update basic info AND assigned courses together
       if (editingEmployee.userId?.lyzrId) {
+        // Active employee - update basic info only
+        const response = await fetch(
+          `/api/organizations/${currentOrganization.id}/members/${editingEmployee._id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: editingEmployee.name,
+              departmentId: editingEmployee.departmentId?._id || null,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to update employee');
+        }
+
+        // Handle enrollment changes for active employees
         await handleEnrollmentChanges(editingEmployee.userId.lyzrId, finalSelectedCourses);
+      } else {
+        // Invited employee - update basic info AND assigned courses
+        const response = await fetch(
+          `/api/organizations/${currentOrganization.id}/members/${editingEmployee._id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: editingEmployee.name,
+              departmentId: editingEmployee.departmentId?._id || null,
+              courseIds: finalSelectedCourses, // Send course assignments for invited employees
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to update employee');
+        }
+
+        console.log(`✅ Updated invited employee with ${finalSelectedCourses.length} assigned courses`);
       }
 
       toast.success('Employee updated successfully!');
