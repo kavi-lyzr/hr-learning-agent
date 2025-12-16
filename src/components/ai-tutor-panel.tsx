@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
+import { useUserProfile } from "@/hooks/use-queries";
 import {
   Bot,
   Send,
-  User,
   Minimize2,
   BookOpen,
   GraduationCap,
@@ -73,7 +74,8 @@ interface Conversation {
 
 export function AiTutorPanel() {
   const { currentOrganization } = useOrganization();
-  const { userId } = useAuth();
+  const { userId, email, displayName } = useAuth();
+  const { data: userProfile } = useUserProfile(email);
   const pathname = usePathname();
   const params = useParams();
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -479,9 +481,18 @@ export function AiTutorPanel() {
       <div className="border-b p-4 bg-gradient-to-r from-muted/30 to-muted/10">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <Bot className="h-4 w-4 text-primary" />
-            </div>
+            {currentOrganization?.iconUrl ? (
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={currentOrganization.iconUrl} alt={currentOrganization.name} />
+                <AvatarFallback className="bg-primary/10">
+                  <Bot className="h-4 w-4 text-primary" />
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bot className="h-4 w-4 text-primary" />
+              </div>
+            )}
             <div>
               <h3 className="font-semibold text-sm">AI Learning Assistant</h3>
             </div>
@@ -564,9 +575,7 @@ export function AiTutorPanel() {
             <GraduationCap className="h-3 w-3 flex-shrink-0" />
             <span className="truncate">@ {currentContext.courseName}</span>
           </Badge>
-        ) : (
-          <p className="text-xs text-muted-foreground">Always here to help :)</p>
-        )}
+        ) : null}
       </div>
 
       {/* Messages */}
@@ -582,9 +591,18 @@ export function AiTutorPanel() {
                 )}
               >
                 {message.role === 'assistant' && (
-                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-3 w-3 text-primary" />
-                  </div>
+                  currentOrganization?.iconUrl ? (
+                    <Avatar className="h-6 w-6 flex-shrink-0">
+                      <AvatarImage src={currentOrganization.iconUrl} alt={currentOrganization.name} />
+                      <AvatarFallback className="bg-primary/10">
+                        <Bot className="h-3 w-3 text-primary" />
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Bot className="h-3 w-3 text-primary" />
+                    </div>
+                  )
                 )}
                 <div className="flex flex-col gap-1 max-w-[85%]">
                   <div
@@ -635,9 +653,12 @@ export function AiTutorPanel() {
                   </p>
                 </div>
                 {message.role === 'user' && (
-                  <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                    <User className="h-3 w-3" />
-                  </div>
+                  <Avatar className="h-6 w-6 flex-shrink-0">
+                    <AvatarImage src={userProfile?.avatarUrl || undefined} />
+                    <AvatarFallback className="text-xs bg-muted">
+                      {displayName?.charAt(0).toUpperCase() || email?.charAt(0).toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
                 )}
               </div>
             );
@@ -645,9 +666,18 @@ export function AiTutorPanel() {
           {/* Thinking indicator - show when sending and no first token yet */}
           {isSending && !hasReceivedFirstToken && (
             <div className="flex gap-2 justify-start animate-in fade-in duration-200">
-              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Bot className="h-3 w-3 text-primary" />
-              </div>
+              {currentOrganization?.iconUrl ? (
+                <Avatar className="h-6 w-6 flex-shrink-0">
+                  <AvatarImage src={currentOrganization.iconUrl} alt={currentOrganization.name} />
+                  <AvatarFallback className="bg-primary/10">
+                    <Bot className="h-3 w-3 text-primary" />
+                  </AvatarFallback>
+                </Avatar>
+              ) : (
+                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Bot className="h-3 w-3 text-primary" />
+                </div>
+              )}
               <div className="rounded-lg px-3 py-2 bg-muted">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>

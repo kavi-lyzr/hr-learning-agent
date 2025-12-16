@@ -246,10 +246,10 @@ export default function EmployeeDashboard() {
               {validEnrollments.slice(0, 6).map((enrollment) => (
                 <Card
                   key={enrollment._id}
-                  className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                  className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden pt-0"
                   onClick={() => router.push(`/employee/courses/${enrollment.course._id}`)}
                 >
-                  <div className="w-full h-40 overflow-hidden">
+                  <div className="w-full h-36 overflow-hidden">
                     {enrollment.course.thumbnailUrl ? (
                       <img
                         src={enrollment.course.thumbnailUrl}

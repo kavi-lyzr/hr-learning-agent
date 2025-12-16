@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { LogOut, ChevronDown, Moon, Sun, Eye } from "lucide-react";
+import { LogOut, ChevronDown, Moon, Sun, MessageSquarePlus } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/AuthProvider";
 import { useOrganization } from "@/lib/OrganizationProvider";
@@ -154,8 +154,8 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
         <div className="flex items-center gap-2">
           {/* Request Feature */}
           <FeatureRequestDialog appName={APP_SLUG}>
-            <Button variant="outline" size="sm" className="h-9">
-              Request Feature
+            <Button variant="ghost" size="icon" className="h-9 w-9" title="Request Feature">
+              <MessageSquarePlus className="h-4 w-4" />
             </Button>
           </FeatureRequestDialog>
 
@@ -188,18 +188,34 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
             )}
           </Button>
 
-          {/* View Toggle (Admin Only) */}
+          {/* View Toggle (Admin Only) - Tab Style */}
           {organization && organization.role === 'admin' && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-muted/50">
-              <Eye className="h-4 w-4 text-muted-foreground" />
-              <Switch
-                checked={isAdminView}
-                onCheckedChange={toggleView}
-                className="data-[state=checked]:bg-primary"
+            <div className="relative flex items-center gap-0.5 p-1 rounded-lg border bg-muted/30">
+              {/* Sliding Background */}
+              <div
+                className="absolute top-1 bottom-1 w-[calc(50%-2px)] bg-background shadow-sm rounded-md transition-all duration-300 ease-out"
+                style={{ left: isAdminView ? '4px' : 'calc(50% + 0px)' }}
               />
-              <Label className="text-xs font-medium cursor-pointer" onClick={toggleView}>
-                {isAdminView ? 'Admin' : 'Employee'}
-              </Label>
+
+              {/* Admin Tab */}
+              <button
+                onClick={() => !isAdminView && toggleView()}
+                className={`relative z-10 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 ${
+                  isAdminView ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Admin
+              </button>
+
+              {/* Employee Tab */}
+              <button
+                onClick={() => isAdminView && toggleView()}
+                className={`relative z-10 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 ${
+                  !isAdminView ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Employee
+              </button>
             </div>
           )}
 

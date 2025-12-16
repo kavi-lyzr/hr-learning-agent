@@ -180,10 +180,10 @@ export default function EmployeeCoursesPage() {
                 {filteredBrowseCourses.map((course) => (
                   <Card
                     key={course._id}
-                    className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                    className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden pt-0"
                     onClick={() => handleCourseClick(course._id)}
                   >
-                    <div className="w-full h-40 overflow-hidden">
+                    <div className="w-full h-36 overflow-hidden">
                       {course.thumbnailUrl ? (
                         <img
                           src={course.thumbnailUrl}
@@ -235,10 +235,10 @@ export default function EmployeeCoursesPage() {
                   {inProgressCourses.map((enrollment) => (
                     <Card
                       key={enrollment._id}
-                      className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                      className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden pt-0"
                       onClick={() => handleCourseClick(enrollment.course._id)}
                     >
-                      <div className="w-full h-40 overflow-hidden">
+                      <div className="w-full h-36 overflow-hidden">
                         {enrollment.course.thumbnailUrl ? (
                           <img
                             src={enrollment.course.thumbnailUrl}
@@ -291,10 +291,10 @@ export default function EmployeeCoursesPage() {
                   {notStartedCourses.map((enrollment) => (
                     <Card
                       key={enrollment._id}
-                      className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                      className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden pt-0"
                       onClick={() => handleCourseClick(enrollment.course._id)}
                     >
-                      <div className="w-full h-40 overflow-hidden">
+                      <div className="w-full h-36 overflow-hidden">
                         {enrollment.course.thumbnailUrl ? (
                           <img
                             src={enrollment.course.thumbnailUrl}
@@ -340,10 +340,10 @@ export default function EmployeeCoursesPage() {
                   {completedCourses.map((enrollment) => (
                     <Card
                       key={enrollment._id}
-                      className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                      className="hover:shadow-lg transition-shadow cursor-pointer overflow-hidden pt-0"
                       onClick={() => handleCourseClick(enrollment.course._id)}
                     >
-                      <div className="w-full h-40 overflow-hidden">
+                      <div className="w-full h-36 overflow-hidden">
                         {enrollment.course.thumbnailUrl ? (
                           <img
                             src={enrollment.course.thumbnailUrl}
