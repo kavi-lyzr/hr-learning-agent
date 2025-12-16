@@ -62,8 +62,8 @@ export default function EmployeeLayout({
           {!isAIAssistantPage ? (
             <>
               {/* Desktop: Resizable Panels */}
-              <div className="hidden md:flex flex-1">
-                <ResizablePanelGroup direction="horizontal" className="flex-1">
+              <div className="hidden md:flex">
+                <ResizablePanelGroup direction="horizontal" className="">
                   {/* Main Content Panel */}
                   <ResizablePanel defaultSize={75} minSize={50} className="flex flex-col">
                     <SiteHeader />
@@ -72,7 +72,7 @@ export default function EmployeeLayout({
 
                   {/* AI Tutor Panel - Resizable */}
                   <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={25} minSize={20} maxSize={40} className="flex flex-col">
+                  <ResizablePanel defaultSize={25} minSize={20} maxSize={45} className="flex flex-col">
                     <AiTutorPanel />
                   </ResizablePanel>
                 </ResizablePanelGroup>

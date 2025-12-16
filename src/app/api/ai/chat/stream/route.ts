@@ -148,19 +148,19 @@ export async function POST(request: NextRequest) {
         const transformStream = new TransformStream({
             async transform(chunk, controller) {
                 const text = new TextDecoder().decode(chunk);
-                
+
                 // Parse incoming SSE from Lyzr - it comes as "data: <content>\n\n"
                 const lines = text.split('\n');
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         // Extract the actual content after "data: "
                         const content = line.slice(6);
-                        if (content.trim()) {
+                        if (content.trim() && content !== '[DONE]' && !content.includes('[DONE]')) {
                             fullResponse += content;
                             // Re-emit as clean SSE: data: <content>
                             controller.enqueue(new TextEncoder().encode(`data: ${content}\n\n`));
                         }
-                    } else if (line.trim() && !line.startsWith(':')) {
+                    } else if (line.trim() && !line.startsWith(':') && line !== '[DONE]' && !line.includes('[DONE]')) {
                         // Handle raw content (not SSE formatted)
                         fullResponse += line;
                         controller.enqueue(new TextEncoder().encode(`data: ${line}\n\n`));

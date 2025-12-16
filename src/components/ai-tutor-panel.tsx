@@ -212,7 +212,12 @@ export function AiTutorPanel() {
   const loadConversation = useCallback((conversation: Conversation) => {
     const loadedMessages: Message[] = conversation.messages.map((msg, idx) => ({
       id: `${conversation._id}-${idx}`,
-      content: msg.content,
+      content: msg.content
+        .replace(/\[DONE\]/g, '') // Remove [DONE] markers
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\r/g, '\r')
+        .trim(),
       role: msg.role,
       timestamp: new Date(msg.timestamp),
       attachments: msg.attachments?.map(att => ({
@@ -413,7 +418,7 @@ export function AiTutorPanel() {
           if (line.startsWith('data: ')) {
             const content = line.slice(6);
 
-            if (content === '[DONE]') {
+            if (content === '[DONE]' || content.includes('[DONE]')) {
               setMessages(prev => prev.map(msg =>
                 msg.id === aiMessageId
                   ? { ...msg, isStreaming: false }
@@ -421,7 +426,7 @@ export function AiTutorPanel() {
               ));
               // Refresh conversations list
               fetchConversations();
-            } else if (content) {
+            } else if (content && content.trim()) {
               if (!hasReceivedFirstToken) {
                 setHasReceivedFirstToken(true);
               }
@@ -461,17 +466,23 @@ export function AiTutorPanel() {
     }
   }, [input, isSending, currentOrganization, userId, sessionId, currentContext, selectedFiles, hasReceivedFirstToken, fetchConversations]);
 
+  // When minimized, show a compact reopen button
   if (isMinimized) {
     return (
-      <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <Button
-          onClick={() => setIsMinimized(false)}
-          size="lg"
-          className="rounded-full h-14 w-14 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-        >
-          <Bot className="h-6 w-6" />
-        </Button>
-      </div>
+      <>
+        {/* Fixed button for reopening - rendered outside normal flow */}
+        <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <Button
+            onClick={() => setIsMinimized(false)}
+            size="lg"
+            className="rounded-full h-14 w-14 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+          >
+            <Bot className="h-6 w-6" />
+          </Button>
+        </div>
+        {/* Return a minimal placeholder for the ResizablePanel to collapse */}
+        <div className="hidden" />
+      </>
     );
   }
 
@@ -581,7 +592,7 @@ export function AiTutorPanel() {
       {/* Messages */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 overflow-y-auto">
         <div className="space-y-4 pb-4">
-          {messages.map((message) => {
+          {messages.filter(msg => !(msg.content === '' && !hasReceivedFirstToken)).map((message) => {
             return (
               <div
                 key={message.id}
@@ -604,10 +615,10 @@ export function AiTutorPanel() {
                     </div>
                   )
                 )}
-                <div className="flex flex-col gap-1 max-w-[85%]">
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <div
                     className={cn(
-                      "rounded-lg px-3 py-2 break-words overflow-hidden",
+                      "rounded-lg px-3 py-2 break-words overflow-wrap-anywhere",
                       message.role === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'

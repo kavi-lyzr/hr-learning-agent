@@ -5,14 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
 import { useUserProfile } from "@/hooks/use-queries";
 import {
   Bot,
   Send,
-  Sparkles,
   History,
   Plus,
   MessageSquare,
@@ -132,7 +130,12 @@ export default function EmployeeAIAssistantPage() {
   const loadConversation = useCallback((conversation: Conversation) => {
     const loadedMessages: Message[] = conversation.messages.map((msg, idx) => ({
       id: `${conversation._id}-${idx}`,
-      content: msg.content,
+      content: msg.content
+        .replace(/\[DONE\]/g, '') // Remove [DONE] markers
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\r/g, '\r')
+        .trim(),
       role: msg.role,
       timestamp: new Date(msg.timestamp),
       attachments: msg.attachments?.map(att => ({
@@ -315,7 +318,7 @@ export default function EmployeeAIAssistantPage() {
           if (line.startsWith('data: ')) {
             const content = line.slice(6);
 
-            if (content === '[DONE]') {
+            if (content === '[DONE]' || content.includes('[DONE]')) {
               setMessages(prev => prev.map(msg =>
                 msg.id === aiMessageId
                   ? { ...msg, isStreaming: false }
@@ -323,7 +326,7 @@ export default function EmployeeAIAssistantPage() {
               ));
               // Refresh conversations list
               fetchConversations();
-            } else if (content) {
+            } else if (content && content.trim()) {
               if (!hasReceivedFirstToken) {
                 setHasReceivedFirstToken(true);
               }
@@ -369,50 +372,40 @@ export default function EmployeeAIAssistantPage() {
   };
 
   return (
-    <main className="flex-1 overflow-hidden bg-muted/20 relative w-full h-full">
+    <main className="flex-1 flex flex-col overflow-hidden bg-muted/20 relative w-full">
       {/* Subtle Grid Background */}
       <div className="absolute inset-0 pointer-events-none opacity-5">
         <div className="absolute inset-0 bg-grid-pattern"></div>
       </div>
 
-      <div className="relative z-10 flex flex-col h-full">
-        {/* Header with History */}
-        <div className="border-b bg-background/80 backdrop-blur-sm">
-          <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-                <Sparkles className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold">AI Learning Assistant</h1>
-                <p className="text-xs text-muted-foreground">Your personal guide to mastering courses</p>
-              </div>
-            </div>
+      <div className="relative z-10 flex flex-col flex-1 overflow-hidden h-full">
+        {/* Header with History and New Chat */}
+        <div className="flex-shrink-0 border-b bg-background/80 backdrop-blur-sm">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={startNewChat}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">New Chat</span>
+            </Button>
 
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                  >
-                    <History className="h-4 w-4" />
-                    <span className="hidden sm:inline">History</span>
-                  </Button>
-                </DropdownMenuTrigger>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                >
+                  <History className="h-4 w-4" />
+                  <span className="hidden sm:inline">History</span>
+                </Button>
+              </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuLabel className="flex items-center justify-between">
-                    <span>Chat History</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={startNewChat}
-                      className="h-7 text-xs gap-1"
-                    >
-                      <Plus className="h-3 w-3" />
-                      New Chat
-                    </Button>
+                  <DropdownMenuLabel>
+                    Chat History
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <ScrollArea className="h-[300px]">
@@ -448,12 +441,11 @@ export default function EmployeeAIAssistantPage() {
               </DropdownMenu>
             </div>
           </div>
-        </div>
 
         {/* Messages Area */}
-        <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 py-8">
-          <div className="max-w-4xl mx-auto space-y-6 pb-4">
-            {messages.map((message) => (
+        <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto space-y-6 px-4 py-8 pb-4">
+            {messages.filter(msg => !(msg.content === '' && !hasReceivedFirstToken)).map((message) => (
               <div
                 key={message.id}
                 className={cn(
@@ -570,7 +562,7 @@ export default function EmployeeAIAssistantPage() {
         </ScrollArea>
 
         {/* Input Area - Fixed at bottom */}
-        <div className="border-t bg-background/80 backdrop-blur-sm">
+        <div className="flex-shrink-0 border-t bg-background/80 backdrop-blur-sm">
           <div className="max-w-4xl mx-auto px-4 py-4">
             {selectedFiles.length > 0 && (
               <div className="flex gap-2 flex-wrap mb-2">
@@ -624,7 +616,8 @@ export default function EmployeeAIAssistantPage() {
               <Button
                 onClick={handleSend}
                 disabled={(!input.trim() && selectedFiles.length === 0) || isSending || uploadingFiles}
-                className="h-12 px-6 flex-shrink-0"
+                size="icon"
+                className="h-12 w-12 flex-shrink-0"
               >
                 {uploadingFiles ? (
                   <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
