@@ -180,6 +180,7 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
             size="icon"
             onClick={toggleTheme}
             className="h-9 w-9"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? (
               <Sun className="h-4 w-4" />
@@ -190,17 +191,18 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
 
           {/* View Toggle (Admin Only) - Tab Style */}
           {organization && organization.role === 'admin' && (
-            <div className="relative flex items-center gap-0.5 p-1 rounded-lg border bg-muted/30">
+            <div className="relative flex items-center gap-1 p-1 rounded-lg border bg-muted/30">
               {/* Sliding Background */}
               <div
-                className="absolute top-1 bottom-1 w-[calc(50%-2px)] bg-background shadow-sm rounded-md transition-all duration-300 ease-out"
-                style={{ left: isAdminView ? '4px' : 'calc(50% + 0px)' }}
+                className={`absolute top-1 bottom-1 ${ isAdminView ? "w-2/5" : "w-[55%]"} bg-background dark:bg-muted shadow-sm rounded-md transition-all duration-300 ease-out text-center`}
+                style={{ left: isAdminView ? '4px' : 'calc(43% + 0px)' }}
               />
 
               {/* Admin Tab */}
               <button
                 onClick={() => !isAdminView && toggleView()}
-                className={`relative z-10 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 ${
+                title="Switch to Admin View"
+                className={`relative z-10 px-3 py-1.5 pr-2 text-xs font-medium rounded-md transition-colors duration-200 text-center w-2/5 ${
                   isAdminView ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -210,7 +212,8 @@ export function SiteHeader({ breadcrumbs }: SiteHeaderProps) {
               {/* Employee Tab */}
               <button
                 onClick={() => isAdminView && toggleView()}
-                className={`relative z-10 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 ${
+                title="Switch to Employee View"
+                className={`relative z-10 px-3 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 w-3/5 ${
                   !isAdminView ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
