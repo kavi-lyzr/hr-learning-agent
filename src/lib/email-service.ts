@@ -100,7 +100,7 @@ const generateCourseAssignmentEmail = (data: CourseAssignmentEmailData) => {
       margin: 0;
       font-size: 22px;
       font-weight: bold;
-      color: #000;
+      color: #ffffff;
     }
     .content {
       color: #333;
@@ -168,7 +168,7 @@ const generateCourseAssignmentEmail = (data: CourseAssignmentEmailData) => {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Course Assignment</h1>
+      <h1 style="color: #ffffff;">Course Assignment</h1>
     </div>
     
     <div class="content">
@@ -346,7 +346,7 @@ ${index + 1}. ${course.title}
       margin: 0;
       font-size: 24px;
       font-weight: bold;
-      color: #000;
+      color: #ffffff;
     }
     .content {
       color: #333;
@@ -389,7 +389,7 @@ ${index + 1}. ${course.title}
 <body>
   <div class="container">
     <div class="header">
-      <h1>Welcome to ${organizationName}!</h1>
+      <h1 style="color: #ffffff;">Welcome to ${organizationName}!</h1>
     </div>
 
     <div class="content">
