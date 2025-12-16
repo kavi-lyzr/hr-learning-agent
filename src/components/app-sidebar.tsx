@@ -104,6 +104,21 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
   const navItems = role === "admin" ? adminNavItems : employeeNavItems;
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Format large numbers to B/M/K format
+  const formatCredits = (num: number | null | undefined): string => {
+    if (!num) return '0';
+    const absNum = Math.abs(num);
+
+    if (absNum >= 1_000_000_000) {
+      return (num / 1_000_000_000).toFixed(2) + 'B';
+    } else if (absNum >= 1_000_000) {
+      return (num / 1_000_000).toFixed(2) + 'M';
+    } else if (absNum >= 1_000) {
+      return (num / 1_000).toFixed(2) + 'K';
+    }
+    return Math.floor(num).toLocaleString();
+  };
+
   useEffect(() => {
     refreshCredits();
   }, []);
@@ -194,7 +209,7 @@ export function AppSidebar({ role = "admin", user }: AppSidebarProps) {
             </span>
             <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-muted-foreground text-right">
-                {Math.floor(credits || 0).toLocaleString()}
+                {formatCredits(credits)}
               </span>
               <button
                 onClick={handleRefreshCredits}
