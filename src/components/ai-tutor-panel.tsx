@@ -72,7 +72,7 @@ interface Conversation {
   };
 }
 
-export function AiTutorPanel() {
+export function AiTutorPanel({ onMinimize }: { onMinimize?: () => void } = {}) {
   const { currentOrganization } = useOrganization();
   const { userId, email, displayName } = useAuth();
   const { data: userProfile } = useUserProfile(email);
@@ -466,7 +466,7 @@ export function AiTutorPanel() {
     }
   }, [input, isSending, currentOrganization, userId, sessionId, currentContext, selectedFiles, hasReceivedFirstToken, fetchConversations]);
 
-  // When minimized, show a compact reopen button
+  // When minimized, show a compact reopen button (fallback when used without parent control)
   if (isMinimized) {
     return (
       <>
@@ -487,9 +487,9 @@ export function AiTutorPanel() {
   }
 
   return (
-    <Card className="h-full flex flex-col shadow-lg border-l rounded-none animate-in slide-in-from-right duration-300 py-4">
+    <Card className="h-full min-h-0 min-w-0 flex flex-col shadow-lg border-l rounded-none animate-in slide-in-from-right duration-300 overflow-hidden">
       {/* Header */}
-      <div className="border-b p-4 bg-gradient-to-r from-muted/30 to-muted/10">
+      <div className="flex-shrink-0 border-b p-4 bg-gradient-to-r from-muted/30 to-muted/10">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             {currentOrganization?.iconUrl ? (
@@ -568,7 +568,14 @@ export function AiTutorPanel() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 hover:bg-muted/50 transition-colors"
-              onClick={() => setIsMinimized(true)}
+              onClick={() => {
+                // Prefer parent-controlled minimize (so layout can collapse the panel completely)
+                if (onMinimize) {
+                  onMinimize();
+                  return;
+                }
+                setIsMinimized(true);
+              }}
             >
               <Minimize2 className="h-4 w-4" />
             </Button>
@@ -590,7 +597,7 @@ export function AiTutorPanel() {
       </div>
 
       {/* Messages */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 overflow-y-auto">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 p-4">
         <div className="space-y-4 pb-4">
           {messages.filter(msg => !(msg.content === '' && !hasReceivedFirstToken)).map((message) => {
             return (
@@ -618,13 +625,25 @@ export function AiTutorPanel() {
                 <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <div
                     className={cn(
-                      "rounded-lg px-3 py-2 break-words overflow-wrap-anywhere",
+                      "rounded-lg px-3 py-2 min-w-0 [overflow-wrap:anywhere] [word-break:break-word]",
                       message.role === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
                     )}
                   >
-                    <div className="text-sm prose prose-sm dark:prose-invert max-w-none [&>*]:my-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                    <div
+                      className={cn(
+                        "text-sm min-w-0 max-w-full",
+                        "prose prose-sm dark:prose-invert max-w-none",
+                        // Keep big markdown from blowing up layout
+                        "[overflow-wrap:anywhere] [word-break:break-word] [&_*]:max-w-full",
+                        // Cap heading sizes + ensure long headings wrap
+                        "prose-headings:break-words prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-h1:leading-snug prose-h2:leading-snug",
+                        // Prevent code blocks from forcing horizontal page scroll
+                        "prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap",
+                        "[&>*]:my-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                      )}
+                    >
                       {message.role === 'assistant' ? (
                         <Streamdown
                           parseIncompleteMarkdown={true}
@@ -702,7 +721,7 @@ export function AiTutorPanel() {
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t p-4">
+      <div className="flex-shrink-0 border-t p-4">
         {selectedFiles.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-2">
             {selectedFiles.map((file, index) => (

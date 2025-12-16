@@ -372,13 +372,8 @@ export default function EmployeeAIAssistantPage() {
   };
 
   return (
-    <main className="flex-1 flex flex-col overflow-hidden bg-muted/20 relative w-full">
-      {/* Subtle Grid Background */}
-      <div className="absolute inset-0 pointer-events-none opacity-5">
-        <div className="absolute inset-0 bg-grid-pattern"></div>
-      </div>
-
-      <div className="relative z-10 flex flex-col flex-1 overflow-hidden h-full">
+    <main className="flex-1 min-h-0 overflow-hidden w-full flex flex-col">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-muted/20 relative">
         {/* Header with History and New Chat */}
         <div className="flex-shrink-0 border-b bg-background/80 backdrop-blur-sm">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-end gap-2">
@@ -443,7 +438,7 @@ export default function EmployeeAIAssistantPage() {
           </div>
 
         {/* Messages Area */}
-        <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-y-auto">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
           <div className="max-w-4xl mx-auto space-y-6 px-4 py-8 pb-4">
             {messages.filter(msg => !(msg.content === '' && !hasReceivedFirstToken)).map((message) => (
               <div
@@ -468,7 +463,7 @@ export default function EmployeeAIAssistantPage() {
                   )
                 )}
 
-                <div className="flex flex-col gap-1 max-w-[85%] sm:max-w-[70%]">
+                <div className="flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] min-w-0">
                   <div
                     className={cn(
                       "rounded-2xl px-4 py-3",
@@ -478,7 +473,10 @@ export default function EmployeeAIAssistantPage() {
                     )}
                   >
                     <div className={cn(
-                      "text-sm prose prose-sm dark:prose-invert max-w-none",
+                      "text-sm min-w-0 prose prose-sm dark:prose-invert max-w-none",
+                      "[overflow-wrap:anywhere] [word-break:break-word] [&_*]:max-w-full",
+                      "prose-headings:break-words prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-h1:leading-snug prose-h2:leading-snug",
+                      "prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap",
                       "[&>*]:my-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
                       message.role === 'user' && 'prose-invert'
                     )}>
