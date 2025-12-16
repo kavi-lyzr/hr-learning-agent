@@ -185,24 +185,33 @@ export async function POST(
 
     // Validate department if provided
     let department = null;
+    let finalDepartmentId = null;
+
     if (departmentId) {
-      if (!mongoose.Types.ObjectId.isValid(departmentId)) {
-        return NextResponse.json(
-          { error: 'Invalid department ID' },
-          { status: 400 }
-        );
-      }
+      // Handle "general" department - it's stored in organization, not departments collection
+      if (departmentId === 'general') {
+        finalDepartmentId = null; // General department is represented as null
+      } else {
+        if (!mongoose.Types.ObjectId.isValid(departmentId)) {
+          return NextResponse.json(
+            { error: 'Invalid department ID' },
+            { status: 400 }
+          );
+        }
 
-      department = await Department.findOne({
-        _id: departmentId,
-        organizationId
-      });
+        department = await Department.findOne({
+          _id: departmentId,
+          organizationId
+        });
 
-      if (!department) {
-        return NextResponse.json(
-          { error: 'Department not found' },
-          { status: 404 }
-        );
+        if (!department) {
+          return NextResponse.json(
+            { error: 'Department not found' },
+            { status: 404 }
+          );
+        }
+
+        finalDepartmentId = departmentId;
       }
     }
 
@@ -238,7 +247,7 @@ export async function POST(
       name: name?.trim() || '',
       role: role || 'employee',
       status: 'invited',
-      departmentId: departmentId || undefined,
+      departmentId: finalDepartmentId || undefined,
       assignedCourseIds: coursesToAssign.map(id => new mongoose.Types.ObjectId(id)),
       invitedAt: new Date(),
     });
@@ -248,30 +257,38 @@ export async function POST(
     // Populate department info
     await member.populate('departmentId', 'name');
 
-    // Send welcome email with course list (only for employees)
-    if (member.role === 'employee' && coursesToAssign.length > 0) {
+    // Send welcome email to all new employees (regardless of course assignment)
+    if (member.role === 'employee') {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
         const loginLink = `${baseUrl}/employee/dashboard`;
 
-        // Fetch course details for email
-        const courseDetails = await Promise.all(
-          coursesToAssign.map(async (courseId) => {
-            const course = await Course.findById(courseId);
-            if (!course) return null;
-            return {
-              title: course.title,
-              description: course.description,
-              link: `${baseUrl}/employee/courses/${courseId}`,
-            };
-          })
-        );
-
-        const validCourses = courseDetails.filter(c => c !== null) as Array<{
+        // Fetch course details for email (if any courses assigned)
+        let validCourses: Array<{
           title: string;
           description?: string;
           link: string;
-        }>;
+        }> = [];
+
+        if (coursesToAssign.length > 0) {
+          const courseDetails = await Promise.all(
+            coursesToAssign.map(async (courseId) => {
+              const course = await Course.findById(courseId);
+              if (!course) return null;
+              return {
+                title: course.title,
+                description: course.description,
+                link: `${baseUrl}/employee/courses/${courseId}`,
+              };
+            })
+          );
+
+          validCourses = courseDetails.filter(c => c !== null) as Array<{
+            title: string;
+            description?: string;
+            link: string;
+          }>;
+        }
 
         await sendWelcomeEmail(
           member.email,
@@ -282,7 +299,7 @@ export async function POST(
           loginLink
         );
 
-        console.log(`📧 Welcome email sent to ${member.email}`);
+        console.log(`📧 Welcome email sent to ${member.email}${validCourses.length > 0 ? ` with ${validCourses.length} course(s)` : ' (no courses assigned)'}`);
       } catch (emailError) {
         console.error('Failed to send welcome email:', emailError instanceof Error ? emailError.message : 'Unknown error');
         // Don't fail the member creation if email fails
