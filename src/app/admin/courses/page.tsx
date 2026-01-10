@@ -34,6 +34,7 @@ import {
   X,
   Image as ImageIcon,
   Download,
+  BarChart3,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CourseImportDialog } from "@/components/admin/CourseImportDialog";
@@ -594,6 +595,10 @@ export default function AdminCoursesPage() {
                           <DropdownMenuItem onClick={() => handleEditCourse(course._id)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Course
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => router.push(`/admin/analytics/courses/${course._id}`)}>
+                            <BarChart3 className="h-4 w-4 mr-2" />
+                            View Analytics
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleTogglePublish(course._id, course.status)}>
                             {course.status === 'published' ? (
