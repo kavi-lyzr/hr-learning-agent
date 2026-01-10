@@ -24,6 +24,12 @@ export default function AnalyticsTestPage() {
   const [eventType, setEventType] = useState('lesson_started');
   const [isLoading, setIsLoading] = useState(false);
   const [dbEvents, setDbEvents] = useState<any[]>([]);
+  const [orgEngagement, setOrgEngagement] = useState<any>(null);
+  const [courseAnalytics, setCourseAnalytics] = useState<any>(null);
+  const [userAnalytics, setUserAnalytics] = useState<any>(null);
+  const [userHeatmap, setUserHeatmap] = useState<any>(null);
+  const [dropoffData, setDropoffData] = useState<any>(null);
+  const [aggregationResult, setAggregationResult] = useState<any>(null);
 
   const handleIdentifyUser = () => {
     identifyUser(userId, {
@@ -149,6 +155,181 @@ export default function AnalyticsTestPage() {
     } catch (error) {
       console.error('Error fetching events:', error);
       toast.error('Error fetching events');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBatchEvents = async () => {
+    setIsLoading(true);
+    try {
+      const events = [
+        {
+          organizationId,
+          userId,
+          eventType: 'lesson_started',
+          eventName: 'Lesson Started',
+          properties: { courseId, lessonId, lessonTitle: 'Batch Test Lesson' },
+        },
+        {
+          organizationId,
+          userId,
+          eventType: 'lesson_completed',
+          eventName: 'Lesson Completed',
+          properties: { courseId, lessonId, timeSpent: 20, lessonTitle: 'Batch Test Lesson' },
+        },
+        {
+          organizationId,
+          userId,
+          eventType: 'quiz_completed',
+          eventName: 'Quiz Completed',
+          properties: { courseId, lessonId, score: 90, quizId: 'quiz-batch-1' },
+        },
+      ];
+
+      const response = await fetch('/api/analytics/events/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(`Batch stored ${data.count} events`);
+        console.log('Batch result:', data);
+      } else {
+        toast.error('Failed to batch store events');
+      }
+    } catch (error) {
+      console.error('Error batch storing events:', error);
+      toast.error('Error batch storing events');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFetchOrgEngagement = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/analytics/organization/${organizationId}/engagement`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setOrgEngagement(data.engagement);
+        toast.success('Fetched organization engagement metrics');
+      } else {
+        toast.error('Failed to fetch engagement');
+      }
+    } catch (error) {
+      console.error('Error fetching engagement:', error);
+      toast.error('Error fetching engagement');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFetchCourseAnalytics = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/analytics/courses/${courseId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setCourseAnalytics(data.analytics[0] || null);
+        toast.success('Fetched course analytics');
+      } else {
+        toast.error('Failed to fetch course analytics');
+      }
+    } catch (error) {
+      console.error('Error fetching course analytics:', error);
+      toast.error('Error fetching course analytics');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFetchDropoff = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/analytics/courses/${courseId}/dropoff`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDropoffData(data);
+        toast.success('Fetched dropoff analysis');
+      } else {
+        toast.error('Failed to fetch dropoff data');
+      }
+    } catch (error) {
+      console.error('Error fetching dropoff:', error);
+      toast.error('Error fetching dropoff');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFetchUserAnalytics = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/analytics/users/${userId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setUserAnalytics(data.analytics[0] || null);
+        toast.success('Fetched user analytics');
+      } else {
+        toast.error('Failed to fetch user analytics');
+      }
+    } catch (error) {
+      console.error('Error fetching user analytics:', error);
+      toast.error('Error fetching user analytics');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFetchHeatmap = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/analytics/users/${userId}/heatmap`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setUserHeatmap(data);
+        toast.success('Fetched activity heatmap');
+      } else {
+        toast.error('Failed to fetch heatmap');
+      }
+    } catch (error) {
+      console.error('Error fetching heatmap:', error);
+      toast.error('Error fetching heatmap');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTriggerAggregation = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/analytics/aggregate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId,
+          period: 'daily',
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAggregationResult(data.aggregation);
+        toast.success('Aggregation completed successfully');
+      } else {
+        toast.error('Failed to trigger aggregation');
+      }
+    } catch (error) {
+      console.error('Error triggering aggregation:', error);
+      toast.error('Error triggering aggregation');
     } finally {
       setIsLoading(false);
     }
@@ -287,7 +468,185 @@ export default function AnalyticsTestPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>4. Check PostHog</CardTitle>
+          <CardTitle>4. Batch Events</CardTitle>
+          <CardDescription>
+            Test batch event storage (Phase 3)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleBatchEvents} disabled={isLoading} className="w-full">
+            {isLoading ? 'Storing...' : 'Store 3 Events in Batch'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>5. Organization Analytics</CardTitle>
+            <CardDescription>
+              Test organization-level metrics (Phase 3)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleFetchOrgEngagement} disabled={isLoading} className="w-full">
+              {isLoading ? 'Fetching...' : 'Fetch Organization Engagement'}
+            </Button>
+            {orgEngagement && (
+              <div className="text-xs space-y-1 p-3 bg-muted rounded">
+                <div>Avg Time Spent: {orgEngagement.avgTimeSpent} min</div>
+                <div>Active Users: {orgEngagement.activeUsers}</div>
+                <div>Avg Quiz Score: {orgEngagement.avgQuizScore}</div>
+                <div>Total Engagements: {orgEngagement.totalEngagements}</div>
+                <div>Courses Completed: {orgEngagement.coursesCompleted}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>6. Course Analytics</CardTitle>
+            <CardDescription>
+              Test course-specific metrics (Phase 3)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleFetchCourseAnalytics} disabled={isLoading} className="w-full">
+              {isLoading ? 'Fetching...' : 'Fetch Course Analytics'}
+            </Button>
+            {courseAnalytics && (
+              <div className="text-xs space-y-1 p-3 bg-muted rounded">
+                <div>Enrollments: {courseAnalytics.enrollmentCount}</div>
+                <div>Completions: {courseAnalytics.completionCount}</div>
+                <div>Completion Rate: {courseAnalytics.completionRate}%</div>
+                <div>Avg Time: {courseAnalytics.avgTimeSpent} min</div>
+                <div>Avg Score: {courseAnalytics.avgScore}</div>
+                {courseAnalytics.realTime && <div className="text-yellow-600">⚡ Real-time data</div>}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>7. Course Dropoff Analysis</CardTitle>
+            <CardDescription>
+              Test dropoff detection (Phase 3)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleFetchDropoff} disabled={isLoading} className="w-full">
+              {isLoading ? 'Fetching...' : 'Fetch Dropoff Analysis'}
+            </Button>
+            {dropoffData && (
+              <div className="text-xs space-y-2 p-3 bg-muted rounded max-h-48 overflow-auto">
+                <div className="font-medium">Total Users: {dropoffData.totalUsers}</div>
+                <div className="font-medium">Total Dropoffs: {dropoffData.summary.totalDropoffs}</div>
+                {dropoffData.dropoffPoints.length > 0 ? (
+                  dropoffData.dropoffPoints.map((point: any, idx: number) => (
+                    <div key={idx} className="border-t pt-1">
+                      <div>{point.lessonTitle || point.lessonId}</div>
+                      <div>Dropoffs: {point.dropoffCount} ({point.dropoffRate}%)</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-muted-foreground">No dropoffs detected</div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>8. User Analytics</CardTitle>
+            <CardDescription>
+              Test user-specific metrics (Phase 3)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleFetchUserAnalytics} disabled={isLoading} className="w-full">
+              {isLoading ? 'Fetching...' : 'Fetch User Analytics'}
+            </Button>
+            {userAnalytics && (
+              <div className="text-xs space-y-1 p-3 bg-muted rounded">
+                <div>Total Time: {userAnalytics.totalTimeSpent} min</div>
+                <div>Courses Enrolled: {userAnalytics.coursesEnrolled}</div>
+                <div>Courses Completed: {userAnalytics.coursesCompleted}</div>
+                <div>Avg Quiz Score: {userAnalytics.avgQuizScore}</div>
+                <div>Engagement: {userAnalytics.engagementLevel}</div>
+                {userAnalytics.realTime && <div className="text-yellow-600">⚡ Real-time data</div>}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>9. Activity Heatmap</CardTitle>
+            <CardDescription>
+              Test user activity heatmap (Phase 3)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleFetchHeatmap} disabled={isLoading} className="w-full">
+              {isLoading ? 'Fetching...' : 'Fetch Activity Heatmap'}
+            </Button>
+            {userHeatmap && (
+              <div className="text-xs space-y-2 p-3 bg-muted rounded max-h-48 overflow-auto">
+                <div className="font-medium">Statistics:</div>
+                <div>Total Minutes: {userHeatmap.statistics.totalMinutes}</div>
+                <div>Avg/Day: {userHeatmap.statistics.avgMinutesPerDay} min</div>
+                <div>Active Days: {userHeatmap.statistics.activeDays}</div>
+                {userHeatmap.heatmap.length > 0 && (
+                  <>
+                    <div className="font-medium mt-2">Recent Activity:</div>
+                    {userHeatmap.heatmap.slice(0, 5).map((day: any, idx: number) => (
+                      <div key={idx} className="border-t pt-1">
+                        <div>{day.date}: {day.minutesSpent} min</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>10. Trigger Aggregation</CardTitle>
+            <CardDescription>
+              Test manual aggregation (Phase 3)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleTriggerAggregation} disabled={isLoading} className="w-full">
+              {isLoading ? 'Aggregating...' : 'Run Aggregation Job'}
+            </Button>
+            {aggregationResult && (
+              <div className="text-xs space-y-1 p-3 bg-muted rounded">
+                <div className="font-medium">Aggregation Result:</div>
+                <div>Period: {aggregationResult.period}</div>
+                <div>Metrics:</div>
+                <div className="ml-2">
+                  <div>Total Time: {aggregationResult.metrics.totalTimeSpent} min</div>
+                  <div>Active Users: {aggregationResult.metrics.activeUsers}</div>
+                  <div>Avg Progress: {aggregationResult.metrics.avgLearningProgress}%</div>
+                  <div>Total Events: {aggregationResult.metrics.totalEngagements}</div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>11. Check PostHog</CardTitle>
           <CardDescription>
             Verify events in your PostHog dashboard
           </CardDescription>
