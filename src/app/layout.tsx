@@ -6,6 +6,7 @@ import { AuthProvider } from "@/lib/AuthProvider";
 import { OrganizationProvider } from "@/lib/OrganizationProvider";
 import { QueryProvider } from "@/lib/QueryProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { PostHogProvider } from "@/components/Posthog-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,23 +54,25 @@ export default function RootLayout({
         <meta name="theme-color" content="#8b5cf6" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <QueryProvider>
-            <AuthProvider>
-              <OrganizationProvider>
-                <main className="w-full min-w-full">
-                  {children}
-                  <Toaster />
-                </main>
-              </OrganizationProvider>
-            </AuthProvider>
-          </QueryProvider>
-        </ThemeProvider>
+        <PostHogProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <QueryProvider>
+              <AuthProvider>
+                <OrganizationProvider>
+                  <main className="w-full min-w-full">
+                    {children}
+                    <Toaster />
+                  </main>
+                </OrganizationProvider>
+              </AuthProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </PostHogProvider>
       </body>
     </html>
   );
