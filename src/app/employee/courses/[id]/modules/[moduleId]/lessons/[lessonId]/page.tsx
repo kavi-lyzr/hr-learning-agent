@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -11,6 +11,10 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
+import { useOrganization } from "@/lib/OrganizationProvider";
+import { useAuth } from "@/lib/AuthProvider";
+import { useAnalytics } from "@/hooks/use-analytics";
+import { v4 as uuidv4 } from "uuid";
 import {
   ChevronLeft,
   ChevronRight,
@@ -33,6 +37,12 @@ export default function EmployeeLessonViewPage() {
   const moduleId = params.moduleId as string;
   const lessonId = params.lessonId as string;
   const orgId = searchParams.get('org');
+
+  const { currentOrganization } = useOrganization();
+  const { userId } = useAuth();
+  const { trackEvent } = useAnalytics();
+  const sessionIdRef = useRef(uuidv4());
+  const startTimeRef = useRef<number>(Date.now());
 
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -82,11 +92,51 @@ export default function EmployeeLessonViewPage() {
         setIsLoading(false);
       }, 500);
     }
-  }, [orgId]);
+
+    // Track lesson started
+    if (currentOrganization && userId) {
+      trackEvent({
+        organizationId: currentOrganization.id,
+        userId,
+        eventType: 'lesson_started',
+        eventName: 'Lesson Started',
+        properties: {
+          courseId,
+          moduleId,
+          lessonId,
+          lessonTitle: lesson.title,
+          courseTitle: course.title,
+          contentType: lesson.type,
+        },
+        sessionId: sessionIdRef.current,
+      });
+    }
+  }, [orgId, currentOrganization, userId]);
 
   const handleMarkComplete = () => {
     // TODO: Call API to mark lesson as complete
     setLessonCompleted(true);
+
+    // Track lesson completed
+    if (currentOrganization && userId) {
+      const timeSpent = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      trackEvent({
+        organizationId: currentOrganization.id,
+        userId,
+        eventType: 'lesson_completed',
+        eventName: 'Lesson Completed',
+        properties: {
+          courseId,
+          moduleId,
+          lessonId,
+          lessonTitle: lesson.title,
+          courseTitle: course.title,
+          timeSpent: Math.round(timeSpent / 60),
+          contentType: lesson.type,
+        },
+        sessionId: sessionIdRef.current,
+      });
+    }
   };
 
   const handleNavigate = (direction: 'previous' | 'next') => {
@@ -106,113 +156,113 @@ export default function EmployeeLessonViewPage() {
   }
 
   return (
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20">
-              <div className="max-w-5xl mx-auto space-y-6">
-                {/* Lesson Header */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          {lesson.type === 'video' && <PlayCircle className="h-5 w-5 text-primary" />}
-                          {lesson.type === 'article' && <FileText className="h-5 w-5 text-primary" />}
-                          <Badge variant="secondary" className="capitalize">{lesson.type}</Badge>
-                          <span className="text-sm text-muted-foreground">{lesson.duration}</span>
-                        </div>
-                        <CardTitle className="text-2xl">{lesson.title}</CardTitle>
-                      </div>
-                      {lessonCompleted && (
-                        <Badge variant="outline" className="text-green-600 border-green-600">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Completed
-                        </Badge>
-                      )}
-                    </div>
-                  </CardHeader>
-                </Card>
-
-                {/* Lesson Content */}
-                <Card>
-                  <CardContent className="p-0">
-                    {lesson.type === 'video' && lesson.contentType === 'video/youtube' && (
-                      <div className="aspect-video w-full">
-                        <iframe
-                          className="w-full h-full rounded-lg"
-                          src={lesson.contentUrl}
-                          title={lesson.title}
-                          frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      </div>
-                    )}
-
-                    {lesson.type === 'article' && (
-                      <div className="p-8 prose max-w-none">
-                        <div dangerouslySetInnerHTML={{ __html: lesson.articleContent }} />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Actions */}
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <Button
-                        variant="outline"
-                        onClick={() => handleNavigate('previous')}
-                        disabled={!navigation.hasPrevious}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-2" />
-                        Previous Lesson
-                      </Button>
-
-                      <div className="flex items-center gap-4">
-                        {!lessonCompleted && (
-                          <Button onClick={handleMarkComplete}>
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Mark as Complete
-                          </Button>
-                        )}
-                        {lesson.hasQuiz && (
-                          <Button variant="secondary">
-                            Take Quiz
-                          </Button>
-                        )}
-                      </div>
-
-                      <Button
-                        onClick={() => handleNavigate('next')}
-                        disabled={!navigation.hasNext}
-                      >
-                        Next Lesson
-                        <ChevronRight className="h-4 w-4 ml-2" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Progress */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Course Progress</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Overall completion</span>
-                        <span className="font-medium">45%</span>
-                      </div>
-                      <Progress value={45} className="h-2" />
-                      <p className="text-xs text-muted-foreground">
-                        4 of 12 lessons completed
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20">
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Lesson Header */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  {lesson.type === 'video' && <PlayCircle className="h-5 w-5 text-primary" />}
+                  {lesson.type === 'article' && <FileText className="h-5 w-5 text-primary" />}
+                  <Badge variant="secondary" className="capitalize">{lesson.type}</Badge>
+                  <span className="text-sm text-muted-foreground">{lesson.duration}</span>
+                </div>
+                <CardTitle className="text-2xl">{lesson.title}</CardTitle>
               </div>
-            </main>
-          
+              {lessonCompleted && (
+                <Badge variant="outline" className="text-green-600 border-green-600">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Completed
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+        </Card>
+
+        {/* Lesson Content */}
+        <Card>
+          <CardContent className="p-0">
+            {lesson.type === 'video' && lesson.contentType === 'video/youtube' && (
+              <div className="aspect-video w-full">
+                <iframe
+                  className="w-full h-full rounded-lg"
+                  src={lesson.contentUrl}
+                  title={lesson.title}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            )}
+
+            {lesson.type === 'article' && (
+              <div className="p-8 prose max-w-none">
+                <div dangerouslySetInnerHTML={{ __html: lesson.articleContent }} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Actions */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                onClick={() => handleNavigate('previous')}
+                disabled={!navigation.hasPrevious}
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Previous Lesson
+              </Button>
+
+              <div className="flex items-center gap-4">
+                {!lessonCompleted && (
+                  <Button onClick={handleMarkComplete}>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Mark as Complete
+                  </Button>
+                )}
+                {lesson.hasQuiz && (
+                  <Button variant="secondary">
+                    Take Quiz
+                  </Button>
+                )}
+              </div>
+
+              <Button
+                onClick={() => handleNavigate('next')}
+                disabled={!navigation.hasNext}
+              >
+                Next Lesson
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Progress */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Course Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Overall completion</span>
+                <span className="font-medium">45%</span>
+              </div>
+              <Progress value={45} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                4 of 12 lessons completed
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </main>
+
   );
 }

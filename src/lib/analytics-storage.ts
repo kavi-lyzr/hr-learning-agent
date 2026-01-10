@@ -39,7 +39,7 @@ export const storeAnalyticsEvent = async (params: StoreEventParams): Promise<IAn
     const event = new AnalyticsEvent({
       eventId: uuidv4(),
       organizationId: new mongoose.Types.ObjectId(params.organizationId),
-      userId: new mongoose.Types.ObjectId(params.userId),
+      userId: params.userId, // Store Lyzr ID as string
       eventType: params.eventType,
       eventName: params.eventName,
       properties: params.properties || {},
@@ -65,7 +65,7 @@ export const batchStoreEvents = async (events: StoreEventParams[]): Promise<IAna
     const analyticsEvents = events.map(params => ({
       eventId: uuidv4(),
       organizationId: new mongoose.Types.ObjectId(params.organizationId),
-      userId: new mongoose.Types.ObjectId(params.userId),
+      userId: params.userId, // Store Lyzr ID as string
       eventType: params.eventType,
       eventName: params.eventName,
       properties: params.properties || {},
@@ -105,7 +105,7 @@ export const getEventsByOrganization = async (
     }
 
     if (filters?.userId) {
-      query.userId = new mongoose.Types.ObjectId(filters.userId);
+      query.userId = filters.userId; // Use Lyzr ID as string
     }
 
     if (filters?.courseId) {
@@ -152,7 +152,7 @@ export const getEventsByUser = async (
     await dbConnect();
 
     const query: any = {
-      userId: new mongoose.Types.ObjectId(userId),
+      userId: userId, // Use Lyzr ID as string
     };
 
     // Apply filters
@@ -221,7 +221,7 @@ export const getEventsByCourse = async (
     }
 
     if (filters?.userId) {
-      query.userId = new mongoose.Types.ObjectId(filters.userId);
+      query.userId = filters.userId; // Use Lyzr ID as string
     }
 
     if (filters?.sessionId) {

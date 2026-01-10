@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -8,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
 import { useEnrollments } from "@/hooks/use-queries";
+import { useAnalytics } from "@/hooks/use-analytics";
+import { v4 as uuidv4 } from "uuid";
 import {
   BookOpen,
   Clock,
@@ -41,6 +44,9 @@ export default function EmployeeDashboard() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const { userId } = useAuth();
+  const { trackEvent } = useAnalytics();
+  const sessionIdRef = useRef(uuidv4());
+  const hasTrackedPageView = useRef(false);
 
   // Use React Query for data fetching with caching
   const {
@@ -50,6 +56,27 @@ export default function EmployeeDashboard() {
   
   // Cast to local Enrollment type that includes progress field
   const enrollments = enrollmentsData as unknown as Enrollment[];
+
+  // Track dashboard page view
+  useEffect(() => {
+    if (!currentOrganization || !userId || hasTrackedPageView.current) return;
+
+    hasTrackedPageView.current = true;
+
+    trackEvent({
+      organizationId: currentOrganization.id,
+      userId,
+      eventType: 'time_spent_updated',
+      eventName: 'Dashboard Page View',
+      properties: {
+        page: 'employee_dashboard',
+        totalEnrollments: enrollments.length,
+        inProgressCount: enrollments.filter(e => e.status === 'in-progress').length,
+        completedCount: enrollments.filter(e => e.status === 'completed').length,
+      },
+      sessionId: sessionIdRef.current,
+    });
+  }, [currentOrganization, userId, enrollments]);
 
   // Filter out enrollments with deleted/null courses to prevent crashes
   const validEnrollments = enrollments.filter(e => e.course != null);

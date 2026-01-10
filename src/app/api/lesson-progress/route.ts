@@ -5,6 +5,7 @@ import Enrollment from '@/models/enrollment';
 import User from '@/models/user';
 import Course from '@/models/course';
 import mongoose from 'mongoose';
+import { storeAnalyticsEvent } from '@/lib/analytics-storage';
 
 /**
  * GET /api/lesson-progress?userId=xxx&lessonId=xxx
@@ -194,6 +195,50 @@ async function updateEnrollmentProgress(
       enrollment.status = 'completed';
       enrollment.completedAt = new Date();
       console.log(`🎉 Course completed!`);
+
+      // Track course completion event
+      try {
+        // Get user document to access lyzrId
+        const userDoc = await User.findById(userId);
+        if (!userDoc) {
+          console.warn(`⚠️  User not found for userId: ${userId}`);
+          await enrollment.save();
+          return;
+        }
+
+        // Calculate total time spent across all lessons
+        const allLessonProgress = await LessonProgress.find({
+          userId: userId,
+          courseId,
+        });
+        
+        const totalTimeSpent = allLessonProgress.reduce((sum, lp) => sum + (lp.timeSpent || 0), 0);
+        const totalLessonsCompleted = enrollment.progress.completedLessonIds.length;
+
+        await storeAnalyticsEvent({
+          organizationId: enrollment.organizationId.toString(),
+          userId: userDoc.lyzrId, // Lyzr ID from user document
+          eventType: 'course_completed',
+          eventName: 'Course Completed',
+          properties: {
+            courseId: courseId,
+            courseTitle: course.title,
+            courseCategory: course.category,
+            totalLessons: totalLessons,
+            completedLessons: totalLessonsCompleted,
+            totalTimeSpent: Math.floor(totalTimeSpent / 60), // Convert to minutes
+            startedAt: enrollment.startedAt?.toISOString() || '',
+            completedAt: enrollment.completedAt?.toISOString() || '',
+            durationDays: enrollment.startedAt 
+              ? Math.floor((enrollment.completedAt!.getTime() - enrollment.startedAt.getTime()) / (1000 * 60 * 60 * 24))
+              : 0,
+          },
+          sessionId: '', // Server-side event, no session ID
+        });
+      } catch (trackError) {
+        console.error('Failed to track course completion:', trackError instanceof Error ? trackError.message : 'Unknown error');
+        // Don't fail the completion if tracking fails
+      }
     }
 
     // Set current lesson

@@ -14,7 +14,7 @@ export type EventType =
 export interface IAnalyticsEvent extends Document {
   eventId: string; // Unique identifier for the event
   organizationId: mongoose.Types.ObjectId;
-  userId: mongoose.Types.ObjectId;
+  userId: string; // Lyzr User ID (string, not ObjectId)
   eventType: EventType;
   eventName: string; // Human-readable event name
   properties: Record<string, any>; // Flexible properties object for event-specific data
@@ -27,7 +27,7 @@ export interface IAnalyticsEvent extends Document {
 const AnalyticsEventSchema = new Schema<IAnalyticsEvent>({
   eventId: { type: String, required: true, unique: true, index: true },
   organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
-  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  userId: { type: String, required: true, index: true }, // Lyzr User ID as string
   eventType: {
     type: String,
     required: true,

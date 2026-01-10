@@ -1,11 +1,15 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useDashboardStats, useOrganizationActivity } from "@/hooks/use-queries";
+import { useAuth } from "@/lib/AuthProvider";
+import { useAnalytics } from "@/hooks/use-analytics";
+import { v4 as uuidv4 } from "uuid";
 import {
   BookOpen,
   Users,
@@ -34,6 +38,10 @@ interface ActivityEvent {
 export default function AdminDashboard() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
+  const { userId } = useAuth();
+  const { trackEvent } = useAnalytics();
+  const sessionIdRef = useRef(uuidv4());
+  const hasTrackedPageView = useRef(false);
   
   // Use React Query hooks for data fetching with caching
   const { 
@@ -46,6 +54,30 @@ export default function AdminDashboard() {
     data: activities = [], 
     isLoading: activitiesLoading 
   } = useOrganizationActivity(currentOrganization?.id || null);
+
+  // Track admin dashboard page view
+  useEffect(() => {
+    if (!currentOrganization || !userId || hasTrackedPageView.current) return;
+
+    hasTrackedPageView.current = true;
+
+    trackEvent({
+      organizationId: currentOrganization.id,
+      userId,
+      eventType: 'time_spent_updated',
+      eventName: 'Admin Dashboard Page View',
+      properties: {
+        page: 'admin_dashboard',
+        totalCourses: stats?.totalCourses || 0,
+        totalMembers: stats?.totalMembers || 0,
+        totalModules: stats?.totalModules || 0,
+        totalLessons: stats?.totalLessons || 0,
+        publishedCourses: stats?.publishedCourses || 0,
+        activeMembers: stats?.activeMembers || 0,
+      },
+      sessionId: sessionIdRef.current,
+    });
+  }, [currentOrganization, userId, stats]);
 
   // Transform activities to have proper Date objects
   const formattedActivities = activities.map((activity: ActivityEvent) => ({

@@ -7,6 +7,7 @@ import Organization from '@/models/organization';
 import mongoose from 'mongoose';
 import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 import { sendCourseAssignmentEmail } from '@/lib/email-service';
+import { storeAnalyticsEvent } from '@/lib/analytics-storage';
 
 /**
  * GET /api/enrollments?userId=xxx&organizationId=xxx
@@ -202,6 +203,29 @@ export async function POST(request: NextRequest) {
 
     // Populate course details
     await enrollment.populate('courseId', 'title description category thumbnailUrl estimatedDuration');
+
+    // Track course enrollment event
+    try {
+      await storeAnalyticsEvent({
+        organizationId: organizationId,
+        userId: userId, // Lyzr ID
+        eventType: 'course_enrolled',
+        eventName: 'Course Enrolled',
+        properties: {
+          courseId: courseId,
+          courseTitle: course.title,
+          courseCategory: course.category,
+          estimatedDuration: course.estimatedDuration,
+          totalModules: course.modules?.length || 0,
+          totalLessons: course.modules?.reduce((sum: number, mod: any) => sum + (mod.lessons?.length || 0), 0) || 0,
+          enrollmentId: enrollment._id.toString(),
+        },
+        sessionId: '', // Server-side event, no session ID
+      });
+    } catch (trackError) {
+      console.error('Failed to track course enrollment:', trackError instanceof Error ? trackError.message : 'Unknown error');
+      // Don't fail the enrollment if tracking fails
+    }
 
     // Get organization details for email
     const organization = await Organization.findById(organizationId);

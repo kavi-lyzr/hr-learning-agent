@@ -24,6 +24,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { BreadcrumbNav } from "@/components/BreadcrumbNav";
+import { useAnalytics } from "@/hooks/use-analytics";
+import { v4 as uuidv4 } from 'uuid';
 
 interface QuizQuestion {
   questionText: string;
@@ -78,6 +80,10 @@ export default function LessonViewerPage() {
   const lessonId = params.lessonId as string;
   const { currentOrganization } = useOrganization();
   const { userId } = useAuth();
+  const { trackEvent } = useAnalytics();
+
+  // Generate session ID for this lesson session
+  const sessionIdRef = useRef(uuidv4());
 
   const [course, setCourse] = useState<Course | null>(null);
   const [lesson, setLesson] = useState<Lesson | null>(null);
@@ -173,6 +179,67 @@ export default function LessonViewerPage() {
     }
   }, [lesson, userId, watchTime, scrollDepth, timeSpent, isCompleted]);
 
+  // Track time_spent updates every 30 seconds
+  useEffect(() => {
+    if (!lesson || !userId || !currentOrganization) return;
+
+    const timeTrackingInterval = setInterval(() => {
+      const currentTimeSpent = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      
+      trackEvent({
+        organizationId: currentOrganization.id,
+        userId,
+        eventType: 'time_spent_updated',
+        eventName: 'Time Spent Updated',
+        properties: {
+          courseId,
+          lessonId: lesson._id,
+          lessonTitle: lesson.title,
+          timeSpent: currentTimeSpent,
+          contentType: lesson.contentType,
+        },
+        sessionId: sessionIdRef.current,
+      });
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(timeTrackingInterval);
+  }, [lesson, userId, currentOrganization]);
+
+  // Track lesson_abandoned on page unload
+  useEffect(() => {
+    if (!lesson || !userId || !currentOrganization) return;
+
+    const handleBeforeUnload = () => {
+      const currentTimeSpent = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      
+      // Only track if lesson was not completed
+      if (!isCompleted) {
+        trackEvent({
+          organizationId: currentOrganization.id,
+          userId,
+          eventType: 'lesson_abandoned',
+          eventName: 'Lesson Abandoned',
+          properties: {
+            courseId,
+            lessonId: lesson._id,
+            lessonTitle: lesson.title,
+            timeSpent: currentTimeSpent,
+            contentType: lesson.contentType,
+            scrollDepth,
+            watchProgress: videoDuration > 0 ? Math.round((watchTime / videoDuration) * 100) : 0,
+          },
+          sessionId: sessionIdRef.current,
+        });
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [lesson, userId, currentOrganization, isCompleted, scrollDepth, watchTime, videoDuration]);
+
   // Check completion criteria
   useEffect(() => {
     if (lesson && !isCompleted) {
@@ -226,6 +293,25 @@ export default function LessonViewerPage() {
 
       setLesson(foundLesson);
 
+      // Track lesson started event
+      if (currentOrganization && userId) {
+        trackEvent({
+          organizationId: currentOrganization.id,
+          userId,
+          eventType: 'lesson_started',
+          eventName: 'Lesson Started',
+          properties: {
+            courseId,
+            lessonId: foundLesson._id,
+            lessonTitle: foundLesson.title,
+            courseTitle: courseData.course.title,
+            contentType: foundLesson.contentType,
+            duration: foundLesson.duration,
+          },
+          sessionId: sessionIdRef.current,
+        });
+      }
+
       // Fetch lesson progress
       try {
         const progressResponse = await fetch(
@@ -248,6 +334,22 @@ export default function LessonViewerPage() {
 
       // Fetch quiz attempts if lesson has quiz
       if (foundLesson.hasQuiz) {
+        try {
+          const quizResponse = await fetch(
+            `/api/quiz-attempts?userId=${userId}&lessonId=${lessonId}`
+          );
+          if (quizResponse.ok) {
+            const quizData = await quizResponse.json();
+            setQuizAttempts(quizData.attempts || []);
+          }
+        } catch (error) {
+          console.error('Error fetching quiz attempts:', error);
+        }
+      }
+
+      // For video lessons, extract duration from YouTube
+      if (foundLesson.hasQuiz) {
+        // Automatically fetch quiz attempts when the lesson is loaded
         try {
           const quizResponse = await fetch(
             `/api/quiz-attempts?userId=${userId}&lessonId=${lessonId}`
@@ -298,10 +400,28 @@ export default function LessonViewerPage() {
   };
 
     const markAsComplete = async () => {
-      if (isCompleted) return;
+      if (isCompleted || !currentOrganization || !userId || !lesson || !course) return;
   
       setIsCompleted(true);
       await saveProgress(true);
+      
+      // Track lesson completed event
+      trackEvent({
+        organizationId: currentOrganization.id,
+        userId,
+        eventType: 'lesson_completed',
+        eventName: 'Lesson Completed',
+        properties: {
+          courseId,
+          lessonId: lesson._id,
+          lessonTitle: lesson.title,
+          courseTitle: course.title,
+          timeSpent: Math.round(timeSpent / 60), // Convert seconds to minutes
+          progressPercentage: 100,
+          contentType: lesson.contentType,
+        },
+        sessionId: sessionIdRef.current,
+      });
       // Note: Toast removed per user request - completion shown via UI badge instead
     };
 
@@ -333,11 +453,29 @@ export default function LessonViewerPage() {
   };
 
   const handleStartQuiz = () => {
+    if (!currentOrganization || !userId || !lesson) return;
+    
     setIsQuizActive(true);
     setCurrentQuestionIndex(0);
     setSelectedAnswers([]);
     setShowResults(false);
     setQuizScore(0);
+    
+    // Track quiz started event
+    trackEvent({
+      organizationId: currentOrganization.id,
+      userId,
+      eventType: 'quiz_started',
+      eventName: 'Quiz Started',
+      properties: {
+        courseId,
+        lessonId: lesson._id,
+        lessonTitle: lesson.title,
+        quizId: `quiz_${lesson._id}`,
+        totalQuestions: lesson.quizData?.questions.length || 0,
+      },
+      sessionId: sessionIdRef.current,
+    });
   };
 
   const handleSelectAnswer = (answerIndex: number) => {
@@ -402,6 +540,28 @@ export default function LessonViewerPage() {
       setQuizAttempts([...quizAttempts, data.attempt]);
       setShowResults(true);
       setIsQuizActive(false);
+
+      // Track quiz completion/failure event
+      const passed = score >= 70;
+      trackEvent({
+        organizationId: currentOrganization?.id || '',
+        userId,
+        eventType: passed ? 'quiz_completed' : 'quiz_failed',
+        eventName: passed ? 'Quiz Completed' : 'Quiz Failed',
+        properties: {
+          courseId,
+          lessonId: lesson._id,
+          lessonTitle: lesson.title,
+          quizId: `quiz_${lesson._id}`,
+          score,
+          totalQuestions: lesson.quizData.questions.length,
+          correctAnswers: correctCount,
+          attemptNumber: quizAttempts.length + 1,
+          timeSpent: Math.floor(timeSpent),
+          passed,
+        },
+        sessionId: sessionIdRef.current,
+      });
 
       toast.success(score >= 70 ? 'Quiz passed!' : 'Quiz submitted');
     } catch (error: any) {
