@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useAuth } from "@/lib/AuthProvider";
-import { useEnrollments, useCourses } from "@/hooks/use-queries";
 import {
   BookOpen,
   Clock,
@@ -22,6 +21,7 @@ import {
   Eye,
 } from "lucide-react";
 import { generateCourseGradient } from "@/lib/gradient-utils";
+import { useCourses, useEnrollments } from "@/hooks/use-queries";
 
 interface Enrollment {
   _id: string;

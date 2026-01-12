@@ -19,89 +19,72 @@ import {
   Calendar,
   BarChart3,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { KnowledgeGapsChart } from '@/components/admin/analytics/KnowledgeGapsChart';
-
-interface UserAnalytics {
-  userId: string;
-  userName: string;
-  userEmail: string;
-  totalEnrollments: number;
-  completedCourses: number;
-  inProgressCourses: number;
-  overallCompletionRate: number;
-  totalTimeSpent: number;
-  totalLessonsCompleted: number;
-  totalQuizzesPassed: number;
-  avgQuizScore: number;
-  engagementLevel: 'high' | 'medium' | 'low';
-  activityHeatmap: Array<{
-    date: string;
-    minutes: number;
-  }>;
-  enrollments: Array<{
-    courseId: string;
-    courseTitle: string;
-    enrolledAt: Date;
-    progress: number;
-    completedLessons: number;
-    totalLessons: number;
-    timeSpent: number;
-    lastActivity: Date;
-    status: 'completed' | 'in-progress' | 'not-started';
-  }>;
-  knowledgeGaps: Array<{
-    moduleId: string;
-    moduleName: string;
-    courseTitle: string;
-    score: number;
-    attempts: number;
-  }>;
-  timeBreakdown: {
-    learning: number;
-    quizzes: number;
-    reviews: number;
-  };
-}
+import { toast } from 'sonner';
 
 export default function UserAnalyticsPage() {
   const params = useParams();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   const userId = params.id as string;
 
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [userInfo, setUserInfo] = useState<any>(null);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch user analytics and details
   useEffect(() => {
-    if (currentOrganization && userId) {
-      fetchUserAnalytics();
-    }
-  }, [currentOrganization, userId]);
+    if (!userId || !currentOrganization?.id) return;
 
-  const fetchUserAnalytics = async () => {
-    if (!currentOrganization || !userId) return;
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch analytics
+        const analyticsResponse = await fetch(`/api/analytics/users/${userId}`);
+        
+        if (!analyticsResponse.ok) throw new Error('Failed to fetch user analytics');
+        
+        const analyticsData = await analyticsResponse.json();
+        const analytics = analyticsData.analytics?.[0] || null;
+        setAnalytics(analytics);
 
-    setIsLoading(true);
-    try {
-      const response = await fetch(
-        `/api/analytics/users/${userId}/details?organizationId=${currentOrganization.id}`
-      );
+        // Fetch user info from members
+        const membersResponse = await fetch(
+          `/api/organizations/${currentOrganization.id}/members`
+        );
+        
+        if (membersResponse.ok) {
+          const membersData = await membersResponse.json();
+          const member = membersData.members?.find((m: any) => {
+            const memberUserId = typeof m.userId === 'object' ? m.userId._id : m.userId;
+            return memberUserId.toString() === userId;
+          });
+          setUserInfo(member);
+        }
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch user analytics');
+        // Fetch enrollments
+        const enrollmentsResponse = await fetch(
+          `/api/enrollments?userId=${userId}`
+        );
+        
+        if (enrollmentsResponse.ok) {
+          const enrollmentsData = await enrollmentsResponse.json();
+          setEnrollments(enrollmentsData.enrollments || []);
+        }
+      } catch (error) {
+        console.error('Error fetching user analytics:', error);
+        toast.error('Failed to load user analytics');
+        setAnalytics(null);
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-      const data = await response.json();
-      setAnalytics(data);
-    } catch (error) {
-      console.error('Error fetching user analytics:', error);
-      toast.error('Failed to load user analytics');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    fetchData();
+  }, [userId, currentOrganization?.id]);
 
   const formatTime = (minutes: number) => {
     if (minutes < 60) return `${Math.round(minutes)}m`;
@@ -182,17 +165,26 @@ export default function UserAnalyticsPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push('/admin/analytics')}
+            onClick={() => router.push('/admin/analytics/users')}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            <h1 className="text-3xl font-bold">{analytics.userName}</h1>
-            <p className="text-muted-foreground mt-1">{analytics.userEmail}</p>
+            <h1 className="text-3xl font-bold">
+              {userInfo?.userId?.name || userInfo?.email || 'User Analytics'}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {userInfo?.email || userInfo?.userId?.email || ''}
+            </p>
           </div>
-          <Badge className={getEngagementColor(analytics.engagementLevel)}>
-            {getEngagementLabel(analytics.engagementLevel)}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {userInfo?.role && (
+              <Badge variant="outline">{userInfo.role}</Badge>
+            )}
+            <Badge className={getEngagementColor(analytics?.engagementLevel || 'low')}>
+              {getEngagementLabel(analytics?.engagementLevel || 'low')}
+            </Badge>
+          </div>
         </div>
 
         {/* Overview Metrics */}
@@ -200,14 +192,14 @@ export default function UserAnalyticsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Enrollments
+                Courses Enrolled
               </CardTitle>
               <BookOpen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{analytics.totalEnrollments}</div>
+              <div className="text-2xl font-bold">{analytics?.coursesEnrolled || 0}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {analytics.completedCourses} completed
+                {analytics?.coursesCompleted || 0} completed
               </p>
             </CardContent>
           </Card>
@@ -221,10 +213,12 @@ export default function UserAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {analytics.overallCompletionRate.toFixed(1)}%
+                {analytics?.coursesEnrolled > 0 
+                  ? ((analytics.coursesCompleted / analytics.coursesEnrolled) * 100).toFixed(1)
+                  : '0'}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {analytics.totalLessonsCompleted} lessons completed
+                {enrollments.length} total enrollments
               </p>
             </CardContent>
           </Card>
@@ -238,7 +232,7 @@ export default function UserAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatTime(analytics.totalTimeSpent)}
+                {formatTime(analytics?.totalTimeSpent || 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Total learning time
@@ -255,149 +249,148 @@ export default function UserAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {analytics.avgQuizScore.toFixed(1)}%
+                {(analytics?.avgQuizScore || 0).toFixed(1)}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {analytics.totalQuizzesPassed} quizzes passed
+                {analytics?.period || 'weekly'} period
               </p>
             </CardContent>
           </Card>
         </div>
 
         {/* Activity Heatmap */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Learning Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ActivityHeatmap data={analytics.activityHeatmap.map(item => ({
-              date: item.date,
-              minutesSpent: item.minutes
-            }))} />
-          </CardContent>
-        </Card>
+        {analytics?.activityHeatmap && analytics.activityHeatmap.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Learning Activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ActivityHeatmap data={(analytics.activityHeatmap || []).map((item: any) => ({
+                date: item.date,
+                minutesSpent: item.minutes || item.minutesSpent || 0
+              }))} />
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Time Breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Time Breakdown
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Learning Content</span>
-                  <span className="text-sm font-semibold">
-                    {formatTime(analytics.timeBreakdown.learning)} (
-                    {((analytics.timeBreakdown.learning / analytics.totalTimeSpent) * 100).toFixed(0)}%)
-                  </span>
-                </div>
-                <Progress
-                  value={(analytics.timeBreakdown.learning / analytics.totalTimeSpent) * 100}
-                  className="h-2"
-                />
+        {/* Last Accessed Courses */}
+        {analytics?.lastAccessedCourses && analytics.lastAccessedCourses.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Recently Accessed
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {analytics.lastAccessedCourses.map((course: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between p-3 border rounded">
+                    <div>
+                      <p className="font-medium">{course.courseTitle || 'Course'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {course.lastAccessed ? formatDistanceToNow(new Date(course.lastAccessed), { addSuffix: true }) : 'N/A'}
+                      </p>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {formatTime(course.timeSpent || 0)}
+                    </span>
+                  </div>
+                ))}
               </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Quizzes</span>
-                  <span className="text-sm font-semibold">
-                    {formatTime(analytics.timeBreakdown.quizzes)} (
-                    {((analytics.timeBreakdown.quizzes / analytics.totalTimeSpent) * 100).toFixed(0)}%)
-                  </span>
-                </div>
-                <Progress
-                  value={(analytics.timeBreakdown.quizzes / analytics.totalTimeSpent) * 100}
-                  className="h-2"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Reviews & Revisions</span>
-                  <span className="text-sm font-semibold">
-                    {formatTime(analytics.timeBreakdown.reviews)} (
-                    {((analytics.timeBreakdown.reviews / analytics.totalTimeSpent) * 100).toFixed(0)}%)
-                  </span>
-                </div>
-                <Progress
-                  value={(analytics.timeBreakdown.reviews / analytics.totalTimeSpent) * 100}
-                  className="h-2"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Course Enrollments */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Course Progress</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {analytics.enrollments.map((enrollment) => (
-                <div key={enrollment.courseId} className="border rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{enrollment.courseTitle}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Last activity:{' '}
-                        {formatDistanceToNow(new Date(enrollment.lastActivity), {
-                          addSuffix: true,
-                        })}
-                      </p>
-                    </div>
-                    <Badge className={getStatusColor(enrollment.status)}>
-                      {enrollment.status.replace('-', ' ')}
-                    </Badge>
-                  </div>
+        {enrollments.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Course Progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {enrollments.map((enrollment: any) => {
+                  const progress = enrollment.progress || 0;
+                  const status = enrollment.status || 'not-started';
+                  
+                  return (
+                    <div key={enrollment._id} className="border rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-semibold">
+                            {enrollment.courseId?.title || 'Course'}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Last activity:{' '}
+                            {enrollment.lastAccessedAt 
+                              ? formatDistanceToNow(new Date(enrollment.lastAccessedAt), { addSuffix: true })
+                              : 'Never'}
+                          </p>
+                        </div>
+                        <Badge className={getStatusColor(status)}>
+                          {status.replace('-', ' ')}
+                        </Badge>
+                      </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-semibold">
-                        {enrollment.completedLessons} / {enrollment.totalLessons} lessons (
-                        {enrollment.progress.toFixed(0)}%)
-                      </span>
-                    </div>
-                    <Progress value={enrollment.progress} className="h-2" />
-                  </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Progress</span>
+                          <span className="font-semibold">
+                            {enrollment.completedLessons || 0} / {enrollment.totalLessons || 0} lessons ({progress.toFixed(0)}%)
+                          </span>
+                        </div>
+                        <Progress value={progress} className="h-2" />
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Time Spent</p>
-                      <p className="font-semibold">{formatTime(enrollment.timeSpent)}</p>
+                      <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Time Spent</p>
+                          <p className="font-semibold">{formatTime(enrollment.timeSpent || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Enrolled</p>
+                          <p className="font-semibold">
+                            {enrollment.enrolledAt 
+                              ? formatDistanceToNow(new Date(enrollment.enrolledAt), { addSuffix: true })
+                              : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Enrolled</p>
-                      <p className="font-semibold">
-                        {formatDistanceToNow(new Date(enrollment.enrolledAt), {
-                          addSuffix: true,
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Knowledge Gaps */}
-        {analytics.knowledgeGaps.length > 0 && (
+        {analytics?.knowledgeGaps && analytics.knowledgeGaps.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Knowledge Gaps</CardTitle>
             </CardHeader>
             <CardContent>
-              <KnowledgeGapsChart data={analytics.knowledgeGaps} />
+              <div className="space-y-3">
+                {analytics.knowledgeGaps.map((gap: any, index: number) => (
+                  <div key={index} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h4 className="font-semibold">{gap.moduleName || gap.lessonTitle || 'Module'}</h4>
+                        <p className="text-xs text-muted-foreground">{gap.courseTitle || 'Course'}</p>
+                      </div>
+                      <Badge variant="destructive">{(gap.score || gap.avgScore || 0).toFixed(1)}%</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {gap.attempts || gap.attemptCount || 0} attempts
+                    </p>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}

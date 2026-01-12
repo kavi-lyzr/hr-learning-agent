@@ -17,82 +17,61 @@ import {
   TrendingDown,
   ChevronRight,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
-
-interface CourseAnalytics {
-  courseId: string;
-  courseTitle: string;
-  totalEnrollments: number;
-  activeEnrollments: number;
-  completedEnrollments: number;
-  completionRate: number;
-  avgCompletionTime: number;
-  avgQuizScore: number;
-  totalTimeSpent: number;
-  lessonMetrics: Array<{
-    lessonId: string;
-    lessonTitle: string;
-    starts: number;
-    completions: number;
-    completionRate: number;
-    avgTimeSpent: number;
-    dropoffRate: number;
-  }>;
-  quizMetrics: Array<{
-    lessonId: string;
-    lessonTitle: string;
-    attempts: number;
-    passes: number;
-    failures: number;
-    passRate: number;
-    avgScore: number;
-  }>;
-  engagementTrend: Array<{
-    date: string;
-    enrollments: number;
-    completions: number;
-    timeSpent: number;
-  }>;
-}
+import { toast } from 'sonner';
 
 export default function CourseAnalyticsPage() {
   const params = useParams();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  const [analytics, setAnalytics] = useState<CourseAnalytics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   const courseId = params.id as string;
 
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [course, setCourse] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch course analytics and course details
   useEffect(() => {
-    if (currentOrganization && courseId) {
-      fetchCourseAnalytics();
-    }
-  }, [currentOrganization, courseId]);
+    if (!courseId || !currentOrganization?.id) return;
 
-  const fetchCourseAnalytics = async () => {
-    if (!currentOrganization || !courseId) return;
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch analytics
+        const analyticsResponse = await fetch(
+          `/api/analytics/courses/${courseId}?organizationId=${currentOrganization.id}`
+        );
+        
+        if (!analyticsResponse.ok) throw new Error('Failed to fetch course analytics');
+        
+        const analyticsData = await analyticsResponse.json();
+        
+        // Extract the first analytics object from the array
+        const analytics = analyticsData.analytics?.[0] || null;
+        setAnalytics(analytics);
 
-    setIsLoading(true);
-    try {
-      const response = await fetch(
-        `/api/analytics/courses/${courseId}/details?organizationId=${currentOrganization.id}`
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch course analytics');
+        // Fetch course details
+        const coursesResponse = await fetch(
+          `/api/courses?organizationId=${currentOrganization.id}`
+        );
+        
+        if (coursesResponse.ok) {
+          const coursesData = await coursesResponse.json();
+          const foundCourse = coursesData.courses?.find((c: any) => c._id === courseId);
+          setCourse(foundCourse);
+        }
+      } catch (error) {
+        console.error('Error fetching course analytics:', error);
+        toast.error('Failed to load course analytics');
+        setAnalytics(null);
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-      const data = await response.json();
-      setAnalytics(data);
-    } catch (error) {
-      console.error('Error fetching course analytics:', error);
-      toast.error('Failed to load course analytics');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    fetchData();
+  }, [courseId, currentOrganization?.id]);
 
   const formatTime = (minutes: number) => {
     if (minutes < 60) return `${Math.round(minutes)}m`;
@@ -145,8 +124,10 @@ export default function CourseAnalyticsPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{analytics.courseTitle}</h1>
-            <p className="text-muted-foreground mt-1">Course Analytics</p>
+            <h1 className="text-3xl font-bold">{course?.title || 'Course Analytics'}</h1>
+            <p className="text-muted-foreground mt-1">
+              {course?.description || 'Detailed performance metrics'}
+            </p>
           </div>
         </div>
 
@@ -160,9 +141,9 @@ export default function CourseAnalyticsPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{analytics.totalEnrollments}</div>
+              <div className="text-2xl font-bold">{analytics.enrollmentCount || 0}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {analytics.activeEnrollments} active
+                {analytics.period || 'weekly'} period
               </p>
             </CardContent>
           </Card>
@@ -170,16 +151,16 @@ export default function CourseAnalyticsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Completion Rate
+                Completions
               </CardTitle>
               <Target className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${getCompletionColor(analytics.completionRate)}`}>
-                {analytics.completionRate.toFixed(1)}%
+              <div className={`text-2xl font-bold ${getCompletionColor(analytics.completionRate || 0)}`}>
+                {analytics.completionCount || 0}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {analytics.completedEnrollments} completed
+                {(analytics.completionRate || 0).toFixed(1)}% completion rate
               </p>
             </CardContent>
           </Card>
@@ -187,16 +168,16 @@ export default function CourseAnalyticsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Avg. Completion Time
+                Avg. Time Spent
               </CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatTime(analytics.avgCompletionTime)}
+                {formatTime(analytics.avgTimeSpent || 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {formatTime(analytics.totalTimeSpent)} total
+                Per learner
               </p>
             </CardContent>
           </Card>
@@ -210,124 +191,115 @@ export default function CourseAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {analytics.avgQuizScore.toFixed(1)}%
+                {(analytics.avgScore || 0).toFixed(1)}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Across all quizzes
+                {analytics.avgAttemptsToPass || 0} avg attempts
               </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Lesson Metrics */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Lesson Performance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {analytics.lessonMetrics.map((lesson, index) => (
-                <div key={lesson.lessonId} className="border rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Lesson {index + 1}
-                        </span>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                        <h3 className="font-semibold">{lesson.lessonTitle}</h3>
-                      </div>
-                    </div>
-                    <Badge variant={lesson.dropoffRate > 20 ? 'destructive' : 'secondary'}>
-                      {lesson.dropoffRate.toFixed(1)}% dropoff
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Starts</p>
-                      <p className="text-lg font-semibold">{lesson.starts}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Completions</p>
-                      <p className="text-lg font-semibold">{lesson.completions}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Completion Rate</p>
-                      <p className={`text-lg font-semibold ${getCompletionColor(lesson.completionRate)}`}>
-                        {lesson.completionRate.toFixed(1)}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Avg. Time</p>
-                      <p className="text-lg font-semibold">{formatTime(lesson.avgTimeSpent)}</p>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="mt-3">
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${
-                          lesson.completionRate >= 80
-                            ? 'bg-green-500'
-                            : lesson.completionRate >= 60
-                            ? 'bg-yellow-500'
-                            : 'bg-red-500'
-                        }`}
-                        style={{ width: `${lesson.completionRate}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quiz Metrics */}
-        {analytics.quizMetrics.length > 0 && (
+        {/* Course Details */}
+        {course && (
           <Card>
             <CardHeader>
-              <CardTitle>Quiz Performance</CardTitle>
+              <CardTitle>Course Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Category</p>
+                  <p className="font-medium">{course.category || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={course.status === 'published' ? 'default' : 'secondary'}>
+                    {course.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Modules</p>
+                  <p className="font-medium">{course.totalModules || course.modules?.length || 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Lessons</p>
+                  <p className="font-medium">{course.totalLessons || 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Estimated Duration</p>
+                  <p className="font-medium">{formatTime(course.estimatedDuration || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Created By</p>
+                  <p className="font-medium">{course.createdBy?.name || 'N/A'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Lesson Metrics */}
+        {course?.modules && course.modules.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Course Modules & Lessons</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {analytics.quizMetrics.map((quiz, index) => (
-                  <div key={quiz.lessonId} className="border rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="font-semibold">{quiz.lessonTitle}</h3>
-                      <Badge
-                        variant={quiz.passRate >= 70 ? 'default' : 'destructive'}
-                      >
-                        {quiz.passRate.toFixed(1)}% pass rate
-                      </Badge>
+                {course.modules.map((module: any, moduleIndex: number) => (
+                  <div key={module._id} className="border rounded-lg p-4">
+                    <div className="mb-3">
+                      <h3 className="font-semibold text-lg">
+                        Module {moduleIndex + 1}: {module.title}
+                      </h3>
+                      {module.description && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {module.description}
+                        </p>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Attempts</p>
-                        <p className="text-lg font-semibold">{quiz.attempts}</p>
+                    {module.lessons && module.lessons.length > 0 && (
+                      <div className="space-y-2 mt-4">
+                        {module.lessons.map((lesson: any, lessonIndex: number) => (
+                          <div
+                            key={lesson._id}
+                            className="border rounded p-3 bg-muted/30"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-muted-foreground">
+                                    Lesson {lessonIndex + 1}
+                                  </span>
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                  <h4 className="font-medium">{lesson.title}</h4>
+                                </div>
+                                {lesson.description && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {lesson.description}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <span>{lesson.contentType}</span>
+                                <span>•</span>
+                                <span>{formatTime(lesson.duration || 0)}</span>
+                                {lesson.hasQuiz && (
+                                  <>
+                                    <span>•</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      Quiz ({lesson.quizData?.questions?.length || 0} questions)
+                                    </Badge>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Passes</p>
-                        <p className="text-lg font-semibold text-green-600">
-                          {quiz.passes}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Failures</p>
-                        <p className="text-lg font-semibold text-red-600">
-                          {quiz.failures}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Avg. Score</p>
-                        <p className="text-lg font-semibold">
-                          {quiz.avgScore.toFixed(1)}%
-                        </p>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -335,63 +307,67 @@ export default function CourseAnalyticsPage() {
           </Card>
         )}
 
-        {/* Completion Funnel */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Completion Funnel</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Enrolled</span>
-                  <span className="text-sm font-semibold">
-                    {analytics.totalEnrollments}
-                  </span>
+        {/* Analytics Summary */}
+        {analytics && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Performance Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Enrollment to Completion</span>
+                    <span className="text-sm font-semibold">
+                      {analytics.completionCount} / {analytics.enrollmentCount} enrolled
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full ${
+                        analytics.completionRate >= 75
+                          ? 'bg-green-500'
+                          : analytics.completionRate >= 50
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
+                      }`}
+                      style={{ width: `${analytics.completionRate || 0}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {(analytics.completionRate || 0).toFixed(1)}% completion rate
+                  </p>
                 </div>
-                <div className="w-full bg-muted rounded-full h-3">
-                  <div
-                    className="h-3 rounded-full bg-blue-500"
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Active Learners</span>
-                  <span className="text-sm font-semibold">
-                    {analytics.activeEnrollments} (
-                    {((analytics.activeEnrollments / analytics.totalEnrollments) * 100).toFixed(1)}%)
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-3">
-                  <div
-                    className="h-3 rounded-full bg-yellow-500"
-                    style={{
-                      width: `${(analytics.activeEnrollments / analytics.totalEnrollments) * 100}%`,
-                    }}
-                  />
-                </div>
+                {analytics.avgScore > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Average Quiz Performance</span>
+                      <span className="text-sm font-semibold">
+                        {(analytics.avgScore || 0).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-3">
+                      <div
+                        className={`h-3 rounded-full ${
+                          analytics.avgScore >= 75
+                            ? 'bg-green-500'
+                            : analytics.avgScore >= 50
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                        }`}
+                        style={{ width: `${analytics.avgScore || 0}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Average {analytics.avgAttemptsToPass || 0} attempts to pass
+                    </p>
+                  </div>
+                )}
               </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Completed</span>
-                  <span className="text-sm font-semibold">
-                    {analytics.completedEnrollments} ({analytics.completionRate.toFixed(1)}%)
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-3">
-                  <div
-                    className="h-3 rounded-full bg-green-500"
-                    style={{ width: `${analytics.completionRate}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </main>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrganization } from '@/lib/OrganizationProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,11 +9,18 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Search, BarChart3, User } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface OrganizationMember {
   _id: string;
-  userId: string;
+  userId: any;
   role: string;
+  email: string;
+  status: string;
+  coursesEnrolled?: number;
+  coursesCompleted?: number;
+  coursesInProgress?: number;
+  avgProgress?: number;
   user?: {
     _id: string;
     name: string;
@@ -21,71 +28,39 @@ interface OrganizationMember {
   };
 }
 
-interface UserAnalytics {
-  totalEnrollments: number;
-  completionRate: number;
-  totalTimeSpent: number;
-  avgQuizScore: number;
-}
-
 export default function UsersAnalyticsPage() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  const [members, setMembers] = useState<OrganizationMember[]>([]);
-  const [analytics, setAnalytics] = useState<Record<string, UserAnalytics>>({});
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [membersData, setMembersData] = useState<OrganizationMember[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Fetch organization members
   useEffect(() => {
-    if (currentOrganization) {
-      fetchMembersAndAnalytics();
-    }
-  }, [currentOrganization]);
+    if (!currentOrganization?.id) return;
 
-  const fetchMembersAndAnalytics = async () => {
-    if (!currentOrganization) return;
-
-    setIsLoading(true);
-    try {
-      // Fetch organization members
-      const membersRes = await fetch(`/api/organizations/${currentOrganization.id}/members`);
-      if (membersRes.ok) {
-        const membersData = await membersRes.json();
-        setMembers(membersData.members || []);
-
-        // Fetch analytics for each user
-        const analyticsPromises = (membersData.members || []).map(async (member: OrganizationMember) => {
-          try {
-            const userIdString = typeof member.userId === 'object' 
-              ? (member.userId as any)._id?.toString() || (member.userId as any).toString()
-              : member.userId.toString();
-            
-            const analyticsRes = await fetch(`/api/analytics/users/${userIdString}`);
-            if (analyticsRes.ok) {
-              const analyticsData = await analyticsRes.json();
-              return { userId: userIdString, analytics: analyticsData };
-            }
-          } catch (error) {
-            console.error('Error fetching user analytics:', error);
-          }
-          return null;
-        });
-
-        const analyticsResults = await Promise.all(analyticsPromises);
-        const analyticsMap: Record<string, UserAnalytics> = {};
-        analyticsResults.forEach((result) => {
-          if (result) {
-            analyticsMap[result.userId] = result.analytics;
-          }
-        });
-        setAnalytics(analyticsMap);
+    const fetchMembers = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(
+          `/api/organizations/${currentOrganization.id}/members`
+        );
+        
+        if (!response.ok) throw new Error('Failed to fetch members');
+        
+        const data = await response.json();
+        setMembersData(data.members || []);
+      } catch (error) {
+        console.error('Error fetching members:', error);
+        toast.error('Failed to load members');
+        setMembersData([]);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching members:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
+    fetchMembers();
+  }, [currentOrganization?.id]);
 
   const getUserId = (member: OrganizationMember) => {
     if (typeof member.userId === 'object') {
@@ -94,14 +69,19 @@ export default function UsersAnalyticsPage() {
     return member.userId.toString();
   };
 
-  const filteredMembers = members.filter((member) => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      member.user?.name?.toLowerCase().includes(searchLower) ||
-      member.user?.email?.toLowerCase().includes(searchLower) ||
-      member.role.toLowerCase().includes(searchLower)
-    );
-  });
+  const filteredMembers = useMemo(() => 
+    membersData.filter((member: OrganizationMember) => {
+      const searchLower = searchQuery.toLowerCase();
+      const userName = typeof member.userId === 'object' ? member.userId.name : '';
+      const userEmail = member.email || (typeof member.userId === 'object' ? member.userId.email : '');
+      return (
+        userName?.toLowerCase().includes(searchLower) ||
+        userEmail?.toLowerCase().includes(searchLower) ||
+        member.role.toLowerCase().includes(searchLower)
+      );
+    }),
+    [membersData, searchQuery]
+  );
 
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -166,7 +146,8 @@ export default function UsersAnalyticsPage() {
               <div className="space-y-3">
                 {filteredMembers.map((member) => {
                   const userId = getUserId(member);
-                  const userAnalytics = analytics[userId];
+                  const userName = typeof member.userId === 'object' ? member.userId.name : 'Unknown User';
+                  const userEmail = member.email || (typeof member.userId === 'object' ? member.userId.email : 'No email');
                   
                   return (
                     <div
@@ -182,12 +163,17 @@ export default function UsersAnalyticsPage() {
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
                               <h3 className="font-semibold text-lg">
-                                {member.user?.name || 'Unknown User'}
+                                {userName}
                               </h3>
                               <Badge variant="outline">{member.role}</Badge>
+                              {member.status && (
+                                <Badge variant={member.status === 'active' ? 'default' : 'secondary'}>
+                                  {member.status}
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              {member.user?.email || 'No email'}
+                              {userEmail}
                             </p>
                           </div>
                         </div>
@@ -197,39 +183,30 @@ export default function UsersAnalyticsPage() {
                         </Button>
                       </div>
 
-                      {userAnalytics && (
+                      {/* Analytics Preview */}
+                      {(member.coursesEnrolled !== undefined || member.coursesCompleted !== undefined) && (
                         <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t">
                           <div>
-                            <p className="text-xs text-muted-foreground">Enrollments</p>
-                            <p className="text-lg font-semibold">
-                              {userAnalytics.totalEnrollments}
+                            <p className="text-xs text-muted-foreground">Enrolled</p>
+                            <p className="text-lg font-semibold">{member.coursesEnrolled || 0}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Completed</p>
+                            <p className={`text-lg font-semibold ${member.coursesCompleted ? 'text-green-600' : ''}`}>
+                              {member.coursesCompleted || 0}
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground">Completion Rate</p>
-                            <p className={`text-lg font-semibold ${getCompletionRateColor(userAnalytics.completionRate)}`}>
-                              {userAnalytics.completionRate}%
-                            </p>
+                            <p className="text-xs text-muted-foreground">In Progress</p>
+                            <p className="text-lg font-semibold">{member.coursesInProgress || 0}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground">Time Spent</p>
-                            <p className="text-lg font-semibold">
-                              {formatTime(userAnalytics.totalTimeSpent)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Avg Quiz Score</p>
-                            <p className="text-lg font-semibold">
-                              {userAnalytics.avgQuizScore}%
+                            <p className="text-xs text-muted-foreground">Avg Progress</p>
+                            <p className={`text-lg font-semibold ${getCompletionRateColor(member.avgProgress || 0)}`}>
+                              {(member.avgProgress || 0).toFixed(0)}%
                             </p>
                           </div>
                         </div>
-                      )}
-
-                      {!userAnalytics && (
-                        <p className="text-sm text-muted-foreground mt-4 pt-4 border-t">
-                          No analytics data available yet
-                        </p>
                       )}
                     </div>
                   );

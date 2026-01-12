@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrganization } from '@/lib/OrganizationProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,15 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Search, TrendingUp, TrendingDown, Minus, BarChart3 } from 'lucide-react';
-
-interface Course {
-  _id: string;
-  title: string;
-  description?: string;
-  category?: string;
-  status: string;
-  lessonsCount?: number;
-}
+import { toast } from 'sonner';
 
 interface CourseAnalytics {
   courseId: string;
@@ -30,50 +22,84 @@ interface CourseAnalytics {
 export default function CoursesAnalyticsPage() {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [analytics, setAnalytics] = useState<Record<string, CourseAnalytics>>({});
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [coursesData, setCoursesData] = useState<any[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [coursesLoading, setCoursesLoading] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
+  // Fetch courses
   useEffect(() => {
-    if (currentOrganization) {
-      fetchCoursesAndAnalytics();
-    }
-  }, [currentOrganization]);
+    if (!currentOrganization?.id) return;
 
-  const fetchCoursesAndAnalytics = async () => {
-    if (!currentOrganization) return;
-
-    setIsLoading(true);
-    try {
-      // Fetch all courses
-      const coursesRes = await fetch(`/api/courses?organizationId=${currentOrganization.id}`);
-      if (coursesRes.ok) {
-        const coursesData = await coursesRes.json();
-        setCourses(coursesData.courses || []);
+    const fetchCourses = async () => {
+      setCoursesLoading(true);
+      try {
+        const response = await fetch(
+          `/api/courses?organizationId=${currentOrganization.id}`
+        );
+        
+        if (!response.ok) throw new Error('Failed to fetch courses');
+        
+        const data = await response.json();
+        setCoursesData(data.courses || []);
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+        toast.error('Failed to load courses');
+        setCoursesData([]);
+      } finally {
+        setCoursesLoading(false);
       }
+    };
 
-      // Fetch analytics for all courses
-      const analyticsRes = await fetch(`/api/analytics/organization/${currentOrganization.id}`);
-      if (analyticsRes.ok) {
-        const analyticsData = await analyticsRes.json();
-        const analyticsMap: Record<string, CourseAnalytics> = {};
-        (analyticsData.courses || []).forEach((course: any) => {
-          analyticsMap[course.courseId] = course;
-        });
-        setAnalytics(analyticsMap);
+    fetchCourses();
+  }, [currentOrganization?.id]);
+
+  // Fetch analytics
+  useEffect(() => {
+    if (!currentOrganization?.id) return;
+
+    const fetchAnalytics = async () => {
+      setAnalyticsLoading(true);
+      try {
+        const response = await fetch(
+          `/api/analytics/organization/${currentOrganization.id}`
+        );
+        
+        if (!response.ok) throw new Error('Failed to fetch analytics');
+        
+        const data = await response.json();
+        setAnalyticsData(data);
+      } catch (error) {
+        console.error('Error fetching analytics:', error);
+        // Don't show error toast as analytics might not be available yet
+        setAnalyticsData(null);
+      } finally {
+        setAnalyticsLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
 
-  const filteredCourses = courses.filter((course) =>
-    course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    course.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    course.category?.toLowerCase().includes(searchQuery.toLowerCase())
+    fetchAnalytics();
+  }, [currentOrganization?.id]);
+
+  const isLoading = coursesLoading || analyticsLoading;
+
+  // Map analytics by courseId for easy lookup
+  const analytics = useMemo(() => {
+    const analyticsMap: Record<string, CourseAnalytics> = {};
+    (analyticsData?.courseAnalytics || []).forEach((course: any) => {
+      analyticsMap[course.courseId] = course;
+    });
+    return analyticsMap;
+  }, [analyticsData]);
+
+  const filteredCourses = useMemo(() => 
+    coursesData.filter((course: any) =>
+      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.category?.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [coursesData, searchQuery]
   );
 
   const getCompletionRateColor = (rate: number) => {
@@ -188,35 +214,29 @@ export default function CoursesAnalyticsPage() {
                           <div>
                             <p className="text-xs text-muted-foreground">Completion Rate</p>
                             <div className="flex items-center gap-2">
-                              <p className={`text-lg font-semibold ${getCompletionRateColor(courseAnalytics.completionRate)}`}>
-                                {courseAnalytics.completionRate.toFixed(1)}%
+                              <p className={`text-lg font-semibold ${getCompletionRateColor(courseAnalytics.completionRate || 0)}`}>
+                                {(courseAnalytics.completionRate || 0).toFixed(1)}%
                               </p>
-                              <span className={getCompletionRateColor(courseAnalytics.completionRate)}>
-                                {getCompletionRateIcon(courseAnalytics.completionRate)}
+                              <span className={getCompletionRateColor(courseAnalytics.completionRate || 0)}>
+                                {getCompletionRateIcon(courseAnalytics.completionRate || 0)}
                               </span>
                             </div>
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Avg Time</p>
                             <p className="text-lg font-semibold">
-                              {formatTime(courseAnalytics.avgTimeSpent)}
+                              {formatTime(courseAnalytics.avgTimeSpent || 0)}
                             </p>
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Avg Score</p>
                             <p className="text-lg font-semibold">
-                              {courseAnalytics.avgScore > 0 
-                                ? `${courseAnalytics.avgScore.toFixed(1)}%` 
+                              {(courseAnalytics.avgScore || 0) > 0 
+                                ? `${(courseAnalytics.avgScore || 0).toFixed(1)}%` 
                                 : 'N/A'}
                             </p>
                           </div>
                         </div>
-                      )}
-
-                      {!courseAnalytics && (
-                        <p className="text-sm text-muted-foreground mt-4 pt-4 border-t">
-                          No analytics data available yet
-                        </p>
                       )}
                     </div>
                   );
