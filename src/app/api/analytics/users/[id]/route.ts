@@ -3,6 +3,9 @@ import dbConnect from '@/lib/db';
 import UserAnalytics from '@/models/userAnalytics';
 import AnalyticsEvent from '@/models/analyticsEvent';
 import Enrollment from '@/models/enrollment';
+import QuizAttempt from '@/models/quizAttempt';
+import Course from '@/models/course';
+import Lesson from '@/models/lesson';
 import mongoose from 'mongoose';
 
 export async function GET(
@@ -14,6 +17,10 @@ export async function GET(
     const { searchParams } = new URL(req.url);
 
     await dbConnect();
+
+    // Ensure models are loaded for populate to work
+    Course;
+    Lesson;
 
     const period = searchParams.get('period') || 'weekly';
     const startDate = searchParams.get('startDate');
@@ -41,7 +48,7 @@ export async function GET(
       }
 
       // Calculate metrics
-      const [timeSpentResult, enrollments, quizScoreResult, coursesCompleted] = await Promise.all([
+      const [timeSpentResult, enrollments, quizScoreResult, coursesCompleted, quizAttempts] = await Promise.all([
         // Total time spent
         AnalyticsEvent.aggregate([
           { $match: { ...dateFilter, eventType: 'time_spent_updated' } },
@@ -72,6 +79,13 @@ export async function GET(
           ...dateFilter,
           eventType: 'course_completed',
         }),
+
+        // Quiz attempts
+        QuizAttempt.find({ userId })
+          .populate('courseId', 'title')
+          .populate('lessonId', 'title')
+          .sort({ completedAt: -1 })
+          .lean(),
       ]);
 
       // Calculate engagement level
@@ -80,17 +94,51 @@ export async function GET(
       if (totalTimeSpent > 300) engagementLevel = 'high';
       else if (totalTimeSpent > 100) engagementLevel = 'medium';
 
+      // Calculate quiz statistics
+      const totalQuizAttempts = quizAttempts.length;
+      const passedQuizzes = quizAttempts.filter((q: any) => q.passed).length;
+      const avgQuizScore = quizAttempts.length > 0 
+        ? quizAttempts.reduce((sum: number, q: any) => sum + q.score, 0) / quizAttempts.length 
+        : (quizScoreResult[0]?.avgScore || 0);
+      
+      // Find knowledge gaps (quizzes with low scores)
+      const knowledgeGaps = quizAttempts
+        .filter((q: any) => q.score < 70)
+        .slice(0, 5)
+        .map((q: any) => ({
+          courseTitle: q.courseId?.title || 'Unknown Course',
+          lessonTitle: q.lessonId?.title || 'Unknown Lesson',
+          score: q.score,
+          attemptNumber: q.attemptNumber,
+          completedAt: q.completedAt,
+        }));
+
       const realTimeAnalytics = {
         userId: id,
         period,
         totalTimeSpent: Math.round(totalTimeSpent),
         coursesEnrolled: enrollments.length,
         coursesCompleted,
-        avgQuizScore: Math.round((quizScoreResult[0]?.avgScore || 0) * 10) / 10,
+        avgQuizScore: Math.round(avgQuizScore * 10) / 10,
         engagementLevel,
-        knowledgeGaps: [],
+        knowledgeGaps,
         activityHeatmap: [],
         lastAccessedCourses: [],
+        quizStatistics: {
+          totalAttempts: totalQuizAttempts,
+          passed: passedQuizzes,
+          failed: totalQuizAttempts - passedQuizzes,
+          avgScore: Math.round(avgQuizScore * 10) / 10,
+          recentAttempts: quizAttempts.slice(0, 10).map((q: any) => ({
+            courseTitle: q.courseId?.title || 'Unknown Course',
+            lessonTitle: q.lessonId?.title || 'Unknown Lesson',
+            score: q.score,
+            passed: q.passed,
+            attemptNumber: q.attemptNumber,
+            timeSpent: q.timeSpent,
+            completedAt: q.completedAt,
+          })),
+        },
         realTime: true,
       };
 

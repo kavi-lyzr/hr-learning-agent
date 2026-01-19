@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId'); // Lyzr ID
+    const userId = searchParams.get('userId'); // Can be Lyzr ID or MongoDB ObjectId
     const organizationId = searchParams.get('organizationId');
 
     if (!userId) {
@@ -28,17 +28,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find user by lyzrId
-    const user = await User.findOne({ lyzrId: userId });
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+    let userMongoId: mongoose.Types.ObjectId;
+
+    // Check if userId is a MongoDB ObjectId or lyzrId
+    if (mongoose.Types.ObjectId.isValid(userId) && userId.length === 24) {
+      // It's a MongoDB ObjectId - use it directly
+      userMongoId = new mongoose.Types.ObjectId(userId);
+      console.log('🔍 Using MongoDB ObjectId:', userId);
+    } else {
+      // It's a lyzrId - find the user first
+      const user = await User.findOne({ lyzrId: userId });
+      if (!user) {
+        return NextResponse.json(
+          { error: 'User not found' },
+          { status: 404 }
+        );
+      }
+      userMongoId = user._id as mongoose.Types.ObjectId;
+      console.log('🔍 Found user by lyzrId:', userId, '-> MongoDB ID:', userMongoId);
     }
 
     // Build query - CRITICAL: Convert string IDs to ObjectIds for MongoDB
-    const query: any = { userId: user._id };
+    const query: any = { userId: userMongoId };
     if (organizationId) {
       // Validate organizationId format
       if (!mongoose.Types.ObjectId.isValid(organizationId)) {
@@ -51,7 +62,7 @@ export async function GET(request: NextRequest) {
       query.organizationId = new mongoose.Types.ObjectId(organizationId);
     }
 
-    // console.log('🔍 Querying enrollments:', { userId: user._id.toString(), organizationId });
+    console.log('🔍 Querying enrollments:', { userId: userMongoId.toString(), organizationId });
 
     // Get enrollments with course details
     const enrollments = await Enrollment.find(query)
@@ -218,7 +229,7 @@ export async function POST(request: NextRequest) {
           estimatedDuration: course.estimatedDuration,
           totalModules: course.modules?.length || 0,
           totalLessons: course.modules?.reduce((sum: number, mod: any) => sum + (mod.lessons?.length || 0), 0) || 0,
-          enrollmentId: enrollment._id.toString(),
+          enrollmentId: (enrollment._id as any).toString(),
         },
         sessionId: '', // Server-side event, no session ID
       });

@@ -18,6 +18,9 @@ import {
   TrendingUp,
   Calendar,
   BarChart3,
+  CheckCircle2,
+  XCircle,
+  TrendingDown,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { KnowledgeGapsChart } from '@/components/admin/analytics/KnowledgeGapsChart';
@@ -214,8 +217,8 @@ export default function UserAnalyticsPage() {
             <CardContent>
               <div className="text-2xl font-bold">
                 {analytics?.coursesEnrolled > 0 
-                  ? ((analytics.coursesCompleted / analytics.coursesEnrolled) * 100).toFixed(1)
-                  : '0'}%
+                  ? Math.round((analytics.coursesCompleted / analytics.coursesEnrolled) * 100)
+                  : 0}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {enrollments.length} total enrollments
@@ -249,7 +252,7 @@ export default function UserAnalyticsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {(analytics?.avgQuizScore || 0).toFixed(1)}%
+                {Math.round(analytics?.avgQuizScore || 0)}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {analytics?.period || 'weekly'} period
@@ -257,6 +260,83 @@ export default function UserAnalyticsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Quiz Statistics */}
+        {analytics?.quizStatistics && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Award className="h-5 w-5" />
+                Quiz Performance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="text-center p-4 border rounded-lg">
+                  <div className="flex items-center justify-center mb-2">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="text-2xl font-bold">{analytics.quizStatistics.totalAttempts}</div>
+                  <p className="text-sm text-muted-foreground">Total Attempts</p>
+                </div>
+                <div className="text-center p-4 border rounded-lg bg-green-50 dark:bg-green-950">
+                  <div className="flex items-center justify-center mb-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">{analytics.quizStatistics.passed}</div>
+                  <p className="text-sm text-muted-foreground">Passed</p>
+                </div>
+                <div className="text-center p-4 border rounded-lg bg-red-50 dark:bg-red-950">
+                  <div className="flex items-center justify-center mb-2">
+                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">{analytics.quizStatistics.failed}</div>
+                  <p className="text-sm text-muted-foreground">Failed</p>
+                </div>
+                <div className="text-center p-4 border rounded-lg bg-primary/10">
+                  <div className="flex items-center justify-center mb-2">
+                    <Target className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="text-2xl font-bold text-primary">{analytics.quizStatistics.avgScore}%</div>
+                  <p className="text-sm text-muted-foreground">Average Score</p>
+                </div>
+              </div>
+
+              {/* Recent Quiz Attempts */}
+              {analytics.quizStatistics.recentAttempts && analytics.quizStatistics.recentAttempts.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-sm">Recent Quiz Attempts</h4>
+                  <div className="space-y-2">
+                    {analytics.quizStatistics.recentAttempts.map((attempt: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{attempt.courseTitle}</p>
+                          <p className="text-xs text-muted-foreground">{attempt.lessonTitle}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Attempt #{attempt.attemptNumber} • {formatDistanceToNow(new Date(attempt.completedAt), { addSuffix: true })}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className={`text-lg font-bold ${attempt.passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {attempt.score}%
+                            </div>
+                            <p className="text-xs text-muted-foreground">{formatTime(attempt.timeSpent / 60)}</p>
+                          </div>
+                          {attempt.passed ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Activity Heatmap */}
         {analytics?.activityHeatmap && analytics.activityHeatmap.length > 0 && (
@@ -340,7 +420,7 @@ export default function UserAnalyticsPage() {
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">Progress</span>
                           <span className="font-semibold">
-                            {enrollment.completedLessons || 0} / {enrollment.totalLessons || 0} lessons ({progress.toFixed(0)}%)
+                            {enrollment.completedLessons || 0} / {enrollment.totalLessons || 0} lessons ({Math.round(progress) || 0}%)
                           </span>
                         </div>
                         <Progress value={progress} className="h-2" />
@@ -372,22 +452,28 @@ export default function UserAnalyticsPage() {
         {analytics?.knowledgeGaps && analytics.knowledgeGaps.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Knowledge Gaps</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingDown className="h-5 w-5 text-orange-500" />
+                Knowledge Gaps - Areas Needing Improvement
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {analytics.knowledgeGaps.map((gap: any, index: number) => (
-                  <div key={index} className="border rounded-lg p-4">
+                  <div key={index} className="border rounded-lg p-4 bg-orange-50 dark:bg-orange-950/20">
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <h4 className="font-semibold">{gap.moduleName || gap.lessonTitle || 'Module'}</h4>
+                        <h4 className="font-semibold">{gap.lessonTitle || gap.moduleName || 'Module'}</h4>
                         <p className="text-xs text-muted-foreground">{gap.courseTitle || 'Course'}</p>
                       </div>
-                      <Badge variant="destructive">{(gap.score || gap.avgScore || 0).toFixed(1)}%</Badge>
+                      <Badge variant="destructive">{Math.round(gap.score || 0)}%</Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {gap.attempts || gap.attemptCount || 0} attempts
-                    </p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>Attempt #{gap.attemptNumber || gap.attempts || 1}</span>
+                      {gap.completedAt && (
+                        <span>{formatDistanceToNow(new Date(gap.completedAt), { addSuffix: true })}</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
