@@ -63,7 +63,7 @@ export async function GET(
     const orgCourseIds = new Set(orgCourses.map(c => c._id.toString()));
 
     const totalSeconds = lessonProgressRecords
-      .filter(lp => orgCourseIds.has(lp.courseId.toString()))
+      .filter(lp => lp.courseId && orgCourseIds.has(lp.courseId.toString()))
       .reduce((sum, lp) => sum + (lp.timeSpent || 0), 0);
 
     const learningHours = Math.round(totalSeconds / 3600); // Convert seconds to hours
