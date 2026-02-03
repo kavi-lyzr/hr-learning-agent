@@ -27,11 +27,19 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!organizationId || !userId || !lessonTitle || !lessonContent) {
+    if (!organizationId || !userId) {
       return NextResponse.json(
         {
-          error: 'Missing required fields',
-          details: 'organizationId, userId, lessonTitle, and lessonContent are required',
+          error: 'Auth error',
+          details: 'You are not authorized to generate quizzes',
+        },
+        { status: 401 }
+      );
+    } else if (!lessonContent && !transcript) {
+      return NextResponse.json(
+        {
+          error: 'Lesson content or transcript is required. Please add lesson content or transcript to generate a quiz',
+          details: 'Missing required fields: lesson content or transcript are required to generate a quiz',
         },
         { status: 400 }
       );
