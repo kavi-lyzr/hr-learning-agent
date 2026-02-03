@@ -4,6 +4,7 @@ import Enrollment from '@/models/enrollment';
 import Course from '@/models/course';
 import User from '@/models/user';
 import Organization from '@/models/organization';
+import LessonProgress from '@/models/lessonProgress';
 import mongoose from 'mongoose';
 import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 import { sendCourseAssignmentEmail } from '@/lib/email-service';
@@ -261,6 +262,143 @@ export async function POST(request: NextRequest) {
     console.error('Error creating enrollment:', error);
     return NextResponse.json(
       { error: 'Internal Server Error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/enrollments?action=recalculate&userId=xxx&courseId=xxx
+ * Recalculate enrollment progress from LessonProgress data
+ * This fixes inconsistencies where LessonProgress shows completed
+ * but Enrollment.completedLessonIds is out of sync
+ */
+export async function PATCH(request: NextRequest) {
+  await dbConnect();
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
+    const userId = searchParams.get('userId'); // Lyzr ID
+    const courseId = searchParams.get('courseId');
+
+    if (action !== 'recalculate') {
+      return NextResponse.json(
+        { error: 'Invalid action. Use action=recalculate' },
+        { status: 400 }
+      );
+    }
+
+    if (!userId || !courseId) {
+      return NextResponse.json(
+        { error: 'userId and courseId are required' },
+        { status: 400 }
+      );
+    }
+
+    // Find user by lyzrId
+    const user = await User.findOne({ lyzrId: userId });
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Find enrollment
+    const enrollment = await Enrollment.findOne({
+      userId: user._id,
+      courseId,
+    });
+
+    if (!enrollment) {
+      return NextResponse.json(
+        { error: 'Enrollment not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get all completed LessonProgress entries for this user+course
+    const completedLessonProgress = await LessonProgress.find({
+      userId: user._id,
+      courseId,
+      status: 'completed',
+    }).lean();
+
+    console.log(`🔄 Recalculating progress for user ${userId}, course ${courseId}`);
+    console.log(`   Found ${completedLessonProgress.length} completed LessonProgress entries`);
+
+    // Get the course to calculate total lessons
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Course not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get all lessons in order
+    const sortedModules = [...(course.modules || [])].sort((a, b) => a.order - b.order);
+    const allCourseLessons = sortedModules.flatMap((mod) =>
+      [...(mod.lessons || [])].sort((a, b) => a.order - b.order)
+    );
+    const totalLessons = allCourseLessons.length;
+
+    // Build new completedLessonIds from LessonProgress data
+    const newCompletedLessonIds = completedLessonProgress.map(
+      (lp) => new mongoose.Types.ObjectId(String(lp.lessonId))
+    );
+
+    const oldCompletedCount = enrollment.progress.completedLessonIds.length;
+    const oldPercentage = enrollment.progressPercentage;
+
+    // Update enrollment
+    enrollment.progress.completedLessonIds = newCompletedLessonIds;
+    enrollment.progressPercentage = totalLessons > 0
+      ? Math.round((newCompletedLessonIds.length / totalLessons) * 100)
+      : 0;
+
+    // Find next uncompleted lesson
+    const nextUncompletedLesson = allCourseLessons.find((l) =>
+      l._id && !newCompletedLessonIds.some((id) => id.equals(l._id!))
+    );
+    enrollment.progress.currentLessonId = nextUncompletedLesson?._id;
+
+    // Update status based on progress
+    if (enrollment.progressPercentage === 100 && enrollment.status !== 'completed') {
+      enrollment.status = 'completed';
+      enrollment.completedAt = new Date();
+      console.log(`   🎉 Course marked as completed!`);
+    } else if (enrollment.progressPercentage > 0 && enrollment.status === 'not-started') {
+      enrollment.status = 'in-progress';
+      enrollment.startedAt = enrollment.startedAt || new Date();
+    }
+
+    await enrollment.save();
+
+    console.log(`   📊 Progress updated: ${oldCompletedCount}/${totalLessons} (${oldPercentage}%) → ${newCompletedLessonIds.length}/${totalLessons} (${enrollment.progressPercentage}%)`);
+
+    return NextResponse.json({
+      success: true,
+      enrollment: {
+        _id: enrollment._id,
+        status: enrollment.status,
+        progressPercentage: enrollment.progressPercentage,
+        completedLessons: newCompletedLessonIds.length,
+        totalLessons,
+        currentLessonId: enrollment.progress.currentLessonId,
+      },
+      changes: {
+        completedLessonsBefore: oldCompletedCount,
+        completedLessonsAfter: newCompletedLessonIds.length,
+        percentageBefore: oldPercentage,
+        percentageAfter: enrollment.progressPercentage,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error recalculating enrollment progress:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error', details: error.message },
       { status: 500 }
     );
   }

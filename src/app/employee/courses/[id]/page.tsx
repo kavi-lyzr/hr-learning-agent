@@ -20,7 +20,14 @@ import {
   CheckCircle,
   ArrowLeft,
   Video,
+  RefreshCw,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { generateCourseGradient } from "@/lib/gradient-utils";
 
 interface Lesson {
@@ -75,6 +82,7 @@ export default function CourseDetailPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (currentOrganization && userId && courseId) {
@@ -205,6 +213,29 @@ export default function CourseDetailPage() {
     return enrollment?.progress.completedLessonIds.includes(lessonId) || false;
   };
 
+  const handleSyncProgress = async () => {
+    if (!userId || !courseId || !enrollment || isSyncing) return;
+    try {
+      setIsSyncing(true);
+      const res = await fetch(
+        `/api/enrollments?action=recalculate&userId=${encodeURIComponent(userId)}&courseId=${courseId}`,
+        { method: "PATCH" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      await fetchCourseData();
+      if (data.changes && data.changes.completedLessonsAfter !== data.changes.completedLessonsBefore) {
+        toast.success("Progress updated");
+      } else {
+        toast.success("Progress is up to date");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to sync progress");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
@@ -320,9 +351,31 @@ export default function CourseDetailPage() {
             {enrollment && (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">Your Progress</span>
-                    <span className="text-muted-foreground">
+                  <div className="flex items-center justify-between text-sm gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium">Your Progress</span>
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={handleSyncProgress}
+                              disabled={isSyncing}
+                              className="shrink-0 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                              aria-label="Sync progress"
+                            >
+                              <RefreshCw
+                                className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`}
+                              />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            Sync progress with server
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <span className="text-muted-foreground shrink-0">
                       {enrollment.progress.completedLessonIds.length} / {course.totalLessons} lessons completed
                     </span>
                   </div>
