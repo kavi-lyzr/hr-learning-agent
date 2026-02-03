@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       score,
       passed,
       timeSpent,
+      isModuleAssessment,
     } = body;
 
     // Validate required fields
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
       score: score || 0,
       passed: passed || false,
       timeSpent: timeSpent || 0,
+      isModuleAssessment: isModuleAssessment || false,
       startedAt: new Date(now.getTime() - (timeSpent || 0) * 1000), // Calculate start time
       completedAt: now,
     });

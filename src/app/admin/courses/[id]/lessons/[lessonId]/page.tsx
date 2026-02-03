@@ -48,7 +48,7 @@ interface QuizQuestion {
 interface LessonFormData {
   title: string;
   description: string;
-  contentType: 'video' | 'article' | 'video-article';
+  contentType: 'video' | 'article' | 'video-article' | 'assessment';
   videoUrl: string;
   transcript: any[];
   articleContent: any;
@@ -58,6 +58,7 @@ interface LessonFormData {
   quizData: {
     questions: QuizQuestion[];
   } | null;
+  isModuleAssessment?: boolean;
 }
 
 export default function LessonEditorPage() {
@@ -68,7 +69,9 @@ export default function LessonEditorPage() {
   const courseId = params.id as string;
   const lessonId = params.lessonId as string;
   const moduleId = searchParams.get('moduleId');
+  const lessonType = searchParams.get('type'); // 'assessment' for module assessments
   const isNew = lessonId === 'new';
+  const isAssessment = lessonType === 'assessment';
 
   const [course, setCourse] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -87,6 +90,13 @@ export default function LessonEditorPage() {
   const [rteKey, setRteKey] = useState(0); // Key to force RTE re-render
   const [quizConfigOpen, setQuizConfigOpen] = useState(false);
   const [numQuestions, setNumQuestions] = useState(5);
+  const [addQuestionOpen, setAddQuestionOpen] = useState(false);
+  const [newQuestion, setNewQuestion] = useState<QuizQuestion>({
+    questionText: '',
+    options: ['', ''],
+    correctAnswerIndex: 0,
+    explanation: '',
+  });
 
   // Helper function to extract YouTube video ID
   const getYouTubeVideoId = (url: string): string | null => {
@@ -98,15 +108,29 @@ export default function LessonEditorPage() {
   const [formData, setFormData] = useState<LessonFormData>({
     title: '',
     description: '',
-    contentType: 'article',
+    contentType: isAssessment ? 'assessment' : 'article',
     videoUrl: '',
     transcript: [],
     articleContent: null,
     articleHtml: '',
-    duration: 0,
-    hasQuiz: false,
-    quizData: null,
+    duration: isAssessment ? 10 : 0, // Default 10 min for assessments
+    hasQuiz: isAssessment, // Assessments always have quiz
+    quizData: isAssessment ? { questions: [] } : null,
+    isModuleAssessment: isAssessment,
   });
+
+  // Initialize assessment mode when creating new assessment
+  useEffect(() => {
+    if (isNew && isAssessment) {
+      setFormData(prev => ({
+        ...prev,
+        contentType: 'assessment',
+        hasQuiz: true,
+        quizData: { questions: [] },
+        isModuleAssessment: true,
+      }));
+    }
+  }, [isNew, isAssessment]);
 
   useEffect(() => {
     fetchCourse();
@@ -194,6 +218,7 @@ export default function LessonEditorPage() {
           duration: lesson.duration,
           hasQuiz: lesson.hasQuiz,
           quizData: lesson.quizData || null,
+          isModuleAssessment: lesson.isModuleAssessment || false,
         });
         break;
       }
@@ -387,6 +412,89 @@ export default function LessonEditorPage() {
     setHasChanges(true);
   };
 
+  const handleAddQuestion = () => {
+    // Validate
+    if (!newQuestion.questionText.trim()) {
+      toast.error('Please enter a question');
+      return;
+    }
+
+    const validOptions = newQuestion.options.filter(opt => opt.trim());
+    if (validOptions.length < 2) {
+      toast.error('Please add at least 2 options');
+      return;
+    }
+
+    if (newQuestion.correctAnswerIndex >= validOptions.length) {
+      toast.error('Please select a valid correct answer');
+      return;
+    }
+
+    // Create the question with trimmed options
+    const questionToAdd: QuizQuestion = {
+      questionText: newQuestion.questionText.trim(),
+      options: validOptions,
+      correctAnswerIndex: newQuestion.correctAnswerIndex,
+      explanation: newQuestion.explanation.trim(),
+    };
+
+    // Add to existing questions or create new quiz data
+    const currentQuestions = formData.quizData?.questions || [];
+    setFormData({
+      ...formData,
+      hasQuiz: true,
+      quizData: { questions: [...currentQuestions, questionToAdd] },
+    });
+
+    // Reset and close
+    setNewQuestion({
+      questionText: '',
+      options: ['', ''],
+      correctAnswerIndex: 0,
+      explanation: '',
+    });
+    setAddQuestionOpen(false);
+    setHasChanges(true);
+    toast.success('Question added successfully');
+  };
+
+  const handleAddOption = () => {
+    if (newQuestion.options.length >= 6) {
+      toast.error('Maximum 6 options allowed');
+      return;
+    }
+    setNewQuestion({
+      ...newQuestion,
+      options: [...newQuestion.options, ''],
+    });
+  };
+
+  const handleRemoveOption = (index: number) => {
+    if (newQuestion.options.length <= 2) {
+      toast.error('Minimum 2 options required');
+      return;
+    }
+    const newOptions = newQuestion.options.filter((_, i) => i !== index);
+    // Adjust correct answer index if needed
+    let newCorrectIndex = newQuestion.correctAnswerIndex;
+    if (index === newQuestion.correctAnswerIndex) {
+      newCorrectIndex = 0;
+    } else if (index < newQuestion.correctAnswerIndex) {
+      newCorrectIndex = newQuestion.correctAnswerIndex - 1;
+    }
+    setNewQuestion({
+      ...newQuestion,
+      options: newOptions,
+      correctAnswerIndex: newCorrectIndex,
+    });
+  };
+
+  const handleUpdateNewQuestionOption = (index: number, value: string) => {
+    const newOptions = [...newQuestion.options];
+    newOptions[index] = value;
+    setNewQuestion({ ...newQuestion, options: newOptions });
+  };
+
   const handleSaveTranscript = () => {
     // Convert edited text back to transcript format
     // For simplicity, we'll keep the original timestamps but update the text
@@ -424,17 +532,25 @@ export default function LessonEditorPage() {
     }
 
     // Validate content based on type
-    if (formData.contentType === 'video' || formData.contentType === 'video-article') {
-      if (!formData.videoUrl.trim()) {
-        toast.error('Please enter a YouTube URL for video content');
+    if (formData.contentType === 'assessment') {
+      // Assessments must have at least one quiz question
+      if (!formData.quizData?.questions || formData.quizData.questions.length === 0) {
+        toast.error('Please add at least one quiz question for the assessment');
         return;
       }
-    }
+    } else {
+      if (formData.contentType === 'video' || formData.contentType === 'video-article') {
+        if (!formData.videoUrl.trim()) {
+          toast.error('Please enter a YouTube URL for video content');
+          return;
+        }
+      }
 
-    if (formData.contentType === 'article' || formData.contentType === 'video-article') {
-      if (!formData.articleHtml.trim()) {
-        toast.error('Please add article content');
-        return;
+      if (formData.contentType === 'article' || formData.contentType === 'video-article') {
+        if (!formData.articleHtml.trim()) {
+          toast.error('Please add article content');
+          return;
+        }
       }
     }
 
@@ -472,6 +588,7 @@ export default function LessonEditorPage() {
             transcript: formData.transcript.length > 0 ? formData.transcript : undefined,
             videoUrl: formData.videoUrl,
           },
+          quizData: formData.quizData || undefined,
         });
         console.log(`📊 Auto-estimated lesson duration: ${finalDuration} minutes`);
       }
@@ -489,6 +606,7 @@ export default function LessonEditorPage() {
         duration: finalDuration,
         hasQuiz: formData.hasQuiz,
         quizData: formData.quizData || undefined,
+        isModuleAssessment: formData.isModuleAssessment || false,
         order: isNew ? module.lessons.length : existingLessonOrder,
       };
 
@@ -578,7 +696,10 @@ export default function LessonEditorPage() {
           { label: 'Courses', href: '/admin/courses' },
           { label: course.title, href: `/admin/courses/${courseId}` },
           ...(currentModule ? [{ label: currentModule.title }] : []),
-          { label: isNew ? 'New Lesson' : (currentLesson?.title || formData.title || 'Edit Lesson') },
+          { label: isNew 
+            ? (isAssessment ? 'New Assessment' : 'New Lesson')
+            : (currentLesson?.title || formData.title || (formData.contentType === 'assessment' ? 'Edit Assessment' : 'Edit Lesson')) 
+          },
         ]}
         onSave={handleSave}
         saving={saving}
@@ -591,9 +712,19 @@ export default function LessonEditorPage() {
           {/* Page Title */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <h1 className="text-3xl font-bold mb-2">
-                {isNew ? 'Create New Lesson' : 'Edit Lesson'}
-              </h1>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-3xl font-bold">
+                  {isNew 
+                    ? (formData.contentType === 'assessment' ? 'Create Module Assessment' : 'Create New Lesson')
+                    : (formData.contentType === 'assessment' ? 'Edit Module Assessment' : 'Edit Lesson')
+                  }
+                </h1>
+                {formData.contentType === 'assessment' && (
+                  <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                    Assessment
+                  </Badge>
+                )}
+              </div>
               {hasChanges && (
                 <Badge variant="outline" className="text-orange-600 border-orange-600">
                   Unsaved changes
@@ -650,62 +781,239 @@ export default function LessonEditorPage() {
           </CardContent>
         </Card>
 
-        {/* Content Type */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Content Type</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RadioGroup
-              value={formData.contentType}
-              onValueChange={(value: any) => {
-                setFormData({ ...formData, contentType: value });
-                setHasChanges(true);
-              }}
-            >
-              <div className="flex items-center space-x-2 p-4 border rounded-lg cursor-pointer hover:bg-accent">
-                <RadioGroupItem value="video" id="video" />
-                <Label htmlFor="video" className="flex items-center gap-2 cursor-pointer flex-1">
-                  <Video className="h-4 w-4" />
-                  Video Only
-                  <span className="text-sm text-muted-foreground ml-auto">
-                    YouTube video with transcript
-                  </span>
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2 p-4 border rounded-lg cursor-pointer hover:bg-accent">
-                <RadioGroupItem value="article" id="article" />
-                <Label htmlFor="article" className="flex items-center gap-2 cursor-pointer flex-1">
-                  <FileText className="h-4 w-4" />
-                  Article Only
-                  <span className="text-sm text-muted-foreground ml-auto">
-                    Rich text content
-                  </span>
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2 p-4 border rounded-lg cursor-pointer hover:bg-accent">
-                <RadioGroupItem value="video-article" id="video-article" />
-                <Label htmlFor="video-article" className="flex items-center gap-2 cursor-pointer flex-1">
-                  <Video className="h-4 w-4" />
-                  <FileText className="h-4 w-4" />
-                  Video + Article
-                  <span className="text-sm text-muted-foreground ml-auto">
-                    Both video and article content
-                  </span>
-                </Label>
-              </div>
-            </RadioGroup>
-          </CardContent>
-        </Card>
+        {/* Content Type - Hidden for assessments */}
+        {formData.contentType !== 'assessment' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Content Type</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={formData.contentType}
+                onValueChange={(value: any) => {
+                  setFormData({ ...formData, contentType: value });
+                  setHasChanges(true);
+                }}
+              >
+                <div className="flex items-center space-x-2 p-4 border rounded-lg cursor-pointer hover:bg-accent">
+                  <RadioGroupItem value="video" id="video" />
+                  <Label htmlFor="video" className="flex items-center gap-2 cursor-pointer flex-1">
+                    <Video className="h-4 w-4" />
+                    Video Only
+                    <span className="text-sm text-muted-foreground ml-auto">
+                      YouTube video with transcript
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2 p-4 border rounded-lg cursor-pointer hover:bg-accent">
+                  <RadioGroupItem value="article" id="article" />
+                  <Label htmlFor="article" className="flex items-center gap-2 cursor-pointer flex-1">
+                    <FileText className="h-4 w-4" />
+                    Article Only
+                    <span className="text-sm text-muted-foreground ml-auto">
+                      Rich text content
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2 p-4 border rounded-lg cursor-pointer hover:bg-accent">
+                  <RadioGroupItem value="video-article" id="video-article" />
+                  <Label htmlFor="video-article" className="flex items-center gap-2 cursor-pointer flex-1">
+                    <Video className="h-4 w-4" />
+                    <FileText className="h-4 w-4" />
+                    Video + Article
+                    <span className="text-sm text-muted-foreground ml-auto">
+                      Both video and article content
+                    </span>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Content Sections */}
-        <Tabs defaultValue="content" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="content">Content</TabsTrigger>
-            <TabsTrigger value="quiz">Knowledge Check</TabsTrigger>
-          </TabsList>
+        {/* Content Sections - Show Tabs for lessons, just Quiz for assessments */}
+        {formData.contentType === 'assessment' ? (
+          /* Assessment: Show only Quiz section directly */
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Assessment Questions</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Create questions to test learner knowledge at the module level
+                  </p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!formData.quizData?.questions.length ? (
+                <div className="space-y-6">
+                  <div className="p-8 border-2 border-dashed rounded-lg text-center">
+                    <Wand2 className="h-12 w-12 text-primary mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Add Assessment Questions</h3>
+                    <p className="text-muted-foreground mb-6">
+                      Add questions manually to test learner comprehension of the module content.
+                    </p>
+                    <div className="flex items-center justify-center">
+                      <Button
+                        onClick={() => setAddQuestionOpen(true)}
+                        size="lg"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Question
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Quiz Header Actions */}
+                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-5 w-5 text-green-600" />
+                      <span className="font-medium">
+                        {formData.quizData.questions.length} Question(s)
+                      </span>
+                    </div>
+                    <Button
+                      onClick={() => setAddQuestionOpen(true)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Question
+                    </Button>
+                  </div>
 
-          <TabsContent value="content" className="space-y-6">
+                  {/* Questions List */}
+                  <div className="space-y-4">
+                    {formData.quizData.questions.map((question, qIndex) => (
+                      <Card key={qIndex}>
+                        <CardHeader className="pb-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="outline">Question {qIndex + 1}</Badge>
+                              </div>
+                              {editingQuestionIndex === qIndex ? (
+                                <Textarea
+                                  value={question.questionText}
+                                  onChange={(e) =>
+                                    handleUpdateQuestion(qIndex, { questionText: e.target.value })
+                                  }
+                                  rows={2}
+                                  className="font-medium"
+                                />
+                              ) : (
+                                <p className="font-medium text-base">{question.questionText}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setEditingQuestionIndex(
+                                    editingQuestionIndex === qIndex ? null : qIndex
+                                  )
+                                }
+                              >
+                                {editingQuestionIndex === qIndex ? (
+                                  <Check className="h-4 w-4" />
+                                ) : (
+                                  <Edit3 className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteQuestion(qIndex)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {/* Options */}
+                          <div className="space-y-2">
+                            {question.options.map((option, oIndex) => (
+                              <div
+                                key={oIndex}
+                                className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-colors ${
+                                  question.correctAnswerIndex === oIndex
+                                    ? 'border-green-500 bg-green-50 dark:bg-green-950'
+                                    : 'border-border'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 pt-1">
+                                  {question.correctAnswerIndex === oIndex ? (
+                                    <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center">
+                                      <Check className="h-3 w-3 text-white" />
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="h-5 w-5 rounded-full border-2 border-muted-foreground cursor-pointer hover:border-green-500"
+                                      onClick={() =>
+                                        handleUpdateQuestion(qIndex, { correctAnswerIndex: oIndex })
+                                      }
+                                    />
+                                  )}
+                                  <span className="text-sm font-medium text-muted-foreground">
+                                    {String.fromCharCode(65 + oIndex)}
+                                  </span>
+                                </div>
+                                {editingQuestionIndex === qIndex ? (
+                                  <Input
+                                    value={option}
+                                    onChange={(e) => {
+                                      const newOptions = [...question.options];
+                                      newOptions[oIndex] = e.target.value;
+                                      handleUpdateQuestion(qIndex, { options: newOptions });
+                                    }}
+                                    className="flex-1"
+                                  />
+                                ) : (
+                                  <span className="flex-1">{option}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Explanation */}
+                          <div className="p-3 bg-muted/50 rounded-lg">
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase mb-2 block">
+                              Explanation
+                            </Label>
+                            {editingQuestionIndex === qIndex ? (
+                              <Textarea
+                                value={question.explanation}
+                                onChange={(e) =>
+                                  handleUpdateQuestion(qIndex, { explanation: e.target.value })
+                                }
+                                rows={2}
+                                className="bg-background"
+                              />
+                            ) : (
+                              <p className="text-sm">{question.explanation}</p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Tabs defaultValue="content" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="content">Content</TabsTrigger>
+              <TabsTrigger value="quiz">Knowledge Check</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="content" className="space-y-6">
             {/* Video Content */}
             {(formData.contentType === 'video' || formData.contentType === 'video-article') && (
               <Card>
@@ -931,7 +1239,7 @@ export default function LessonEditorPage() {
                         Our AI will analyze your lesson content and video transcript to create
                         relevant assessment questions automatically.
                       </p>
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-3">
                         <Button
                           onClick={() => setQuizConfigOpen(true)}
                           disabled={generatingQuiz || (!formData.articleHtml && !formData.transcript.length)}
@@ -945,15 +1253,24 @@ export default function LessonEditorPage() {
                           ) : (
                             <>
                               <Wand2 className="h-4 w-4 mr-2" />
-                              Generate Quiz Questions
+                              Generate with AI
                             </>
                           )}
+                        </Button>
+                        <span className="text-muted-foreground">or</span>
+                        <Button
+                          onClick={() => setAddQuestionOpen(true)}
+                          variant="outline"
+                          size="lg"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Manually
                         </Button>
                       </div>
                       {(!formData.articleHtml && !formData.transcript.length) && (
                         <p className="text-sm text-amber-600 mt-4 flex items-center justify-center gap-2">
                           <AlertCircle className="h-4 w-4" />
-                          Add lesson content first (article or video with transcript)
+                          Add lesson content first to use AI generation
                         </p>
                       )}
                     </div>
@@ -969,6 +1286,14 @@ export default function LessonEditorPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Button
+                          onClick={() => setAddQuestionOpen(true)}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Question
+                        </Button>
                         <Button
                           onClick={() => setQuizConfigOpen(true)}
                           disabled={generatingQuiz}
@@ -1113,6 +1438,7 @@ export default function LessonEditorPage() {
             </Card>
           </TabsContent>
         </Tabs>
+        )}
 
         {/* Content Generation Dialog */}
         <Dialog open={contentPromptOpen} onOpenChange={setContentPromptOpen}>
@@ -1259,6 +1585,129 @@ export default function LessonEditorPage() {
                     Generate {numQuestions} Questions
                   </>
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Question Manually Dialog */}
+        <Dialog open={addQuestionOpen} onOpenChange={(open) => {
+          setAddQuestionOpen(open);
+          if (!open) {
+            // Reset form when closing
+            setNewQuestion({
+              questionText: '',
+              options: ['', ''],
+              correctAnswerIndex: 0,
+              explanation: '',
+            });
+          }
+        }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add Question Manually</DialogTitle>
+              <DialogDescription>
+                Create a multiple-choice question with 2-6 answer options.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              {/* Question Text */}
+              <div className="space-y-2">
+                <Label htmlFor="questionText">Question *</Label>
+                <Textarea
+                  id="questionText"
+                  value={newQuestion.questionText}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, questionText: e.target.value })}
+                  rows={2}
+                  placeholder="Enter your question here..."
+                />
+              </div>
+
+              {/* Options */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Answer Options * (select the correct one)</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddOption}
+                    disabled={newQuestion.options.length >= 6}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Option
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {newQuestion.options.map((option, index) => (
+                    <div
+                      key={index}
+                      className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
+                        newQuestion.correctAnswerIndex === index
+                          ? 'border-green-500 bg-green-50 dark:bg-green-950'
+                          : 'border-border'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {newQuestion.correctAnswerIndex === index ? (
+                          <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center cursor-pointer">
+                            <Check className="h-3 w-3 text-white" />
+                          </div>
+                        ) : (
+                          <div
+                            className="h-5 w-5 rounded-full border-2 border-muted-foreground cursor-pointer hover:border-green-500"
+                            onClick={() => setNewQuestion({ ...newQuestion, correctAnswerIndex: index })}
+                            title="Click to mark as correct answer"
+                          />
+                        )}
+                        <span className="text-sm font-medium text-muted-foreground w-4">
+                          {String.fromCharCode(65 + index)}
+                        </span>
+                      </div>
+                      <Input
+                        value={option}
+                        onChange={(e) => handleUpdateNewQuestionOption(index, e.target.value)}
+                        placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                        className="flex-1"
+                      />
+                      {newQuestion.options.length > 2 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveOption(index)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Click the circle next to an option to mark it as the correct answer.
+                </p>
+              </div>
+
+              {/* Explanation */}
+              <div className="space-y-2">
+                <Label htmlFor="explanation">Explanation (optional)</Label>
+                <Textarea
+                  id="explanation"
+                  value={newQuestion.explanation}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, explanation: e.target.value })}
+                  rows={3}
+                  placeholder="Explain why the correct answer is right (shown after the quiz)..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddQuestionOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddQuestion}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Question
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -78,13 +78,14 @@ export function estimateTranscriptDuration(transcript: { text: string; start?: n
  * @returns Estimated duration in minutes
  */
 export function estimateLessonDuration(lesson: {
-  contentType: 'video' | 'article' | 'video-article';
+  contentType: 'video' | 'article' | 'video-article' | 'assessment';
   duration?: number;
   content: {
     articleHtml?: string;
     transcript?: { text: string; start?: number; duration?: number }[];
     videoUrl?: string;
   };
+  quizData?: { questions?: any[] };
 }): number {
   // If duration is already provided and non-zero, use it
   if (lesson.duration && lesson.duration > 0) {
@@ -92,6 +93,13 @@ export function estimateLessonDuration(lesson: {
   }
 
   let totalDuration = 0;
+
+  // For assessments, estimate 2-3 minutes per question
+  if (lesson.contentType === 'assessment') {
+    const questionCount = lesson.quizData?.questions?.length || 0;
+    // Minimum 5 minutes for an assessment, or ~2.5 minutes per question
+    return Math.max(5, Math.round(questionCount * 2.5));
+  }
 
   // Estimate article duration
   if ((lesson.contentType === 'article' || lesson.contentType === 'video-article') && lesson.content.articleHtml) {

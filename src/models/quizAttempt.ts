@@ -14,6 +14,7 @@ export interface IQuizAttempt extends Document {
   score: number; // Percentage 0-100
   passed: boolean;
   timeSpent: number; // Time spent on quiz in seconds
+  isModuleAssessment: boolean; // Differentiates module assessments from lesson quizzes
   startedAt: Date;
   completedAt: Date;
   createdAt: Date;
@@ -34,6 +35,7 @@ const QuizAttemptSchema = new Schema<IQuizAttempt>({
   score: { type: Number, required: true, min: 0, max: 100 },
   passed: { type: Boolean, required: true },
   timeSpent: { type: Number, default: 0 },
+  isModuleAssessment: { type: Boolean, default: false }, // For analytics differentiation
   startedAt: { type: Date, required: true },
   completedAt: { type: Date, required: true },
 }, {
@@ -45,6 +47,7 @@ QuizAttemptSchema.index({ userId: 1, lessonId: 1, attemptNumber: 1 }, { unique: 
 QuizAttemptSchema.index({ userId: 1, courseId: 1 });
 QuizAttemptSchema.index({ organizationId: 1, lessonId: 1 });
 QuizAttemptSchema.index({ lessonId: 1, passed: 1 });
+QuizAttemptSchema.index({ organizationId: 1, isModuleAssessment: 1 }); // For analytics: filter by assessment type
 
 // Clear cache
 if (mongoose.models.QuizAttempt) {
