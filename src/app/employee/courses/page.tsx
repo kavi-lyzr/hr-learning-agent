@@ -100,7 +100,7 @@ export default function EmployeeCoursesPage() {
   const completedCourses = filteredEnrollments.filter(e => e.status === 'completed');
 
   return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20 w-full">
+    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20 w-full @container">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Page Header */}
         <div className="flex items-start justify-between">
@@ -143,7 +143,7 @@ export default function EmployeeCoursesPage() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 @lg:grid-cols-2 @2xl:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Card key={i}>
                 <CardHeader>
@@ -176,7 +176,7 @@ export default function EmployeeCoursesPage() {
                 </div>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 @lg:grid-cols-2 @2xl:grid-cols-3 gap-6">
                 {filteredBrowseCourses.map((course) => (
                   <Card
                     key={course._id}
@@ -231,7 +231,7 @@ export default function EmployeeCoursesPage() {
             {inProgressCourses.length > 0 && (
               <div>
                 <h2 className="text-xl font-semibold mb-4">Continue Learning</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 @lg:grid-cols-2 @2xl:grid-cols-3 gap-6">
                   {inProgressCourses.map((enrollment) => (
                     <Card
                       key={enrollment._id}
@@ -287,7 +287,7 @@ export default function EmployeeCoursesPage() {
             {notStartedCourses.length > 0 && (
               <div>
                 <h2 className="text-xl font-semibold mb-4">Not Started</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 @lg:grid-cols-2 @2xl:grid-cols-3 gap-6">
                   {notStartedCourses.map((enrollment) => (
                     <Card
                       key={enrollment._id}
@@ -336,7 +336,7 @@ export default function EmployeeCoursesPage() {
             {completedCourses.length > 0 && (
               <div>
                 <h2 className="text-xl font-semibold mb-4">Completed</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 @lg:grid-cols-2 @2xl:grid-cols-3 gap-6">
                   {completedCourses.map((enrollment) => (
                     <Card
                       key={enrollment._id}

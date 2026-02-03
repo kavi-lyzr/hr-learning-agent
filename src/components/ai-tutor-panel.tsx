@@ -487,10 +487,10 @@ export function AiTutorPanel({ onMinimize }: { onMinimize?: () => void } = {}) {
   }
 
   return (
-    <Card className="h-full min-h-0 min-w-0 flex flex-col shadow-lg border-l rounded-none animate-in slide-in-from-right duration-300 overflow-hidden">
+    <Card className="h-full py-0 min-h-0 min-w-0 flex flex-col shadow-lg border-l rounded-none animate-in slide-in-from-right duration-300 overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 border-b p-4 bg-gradient-to-r from-muted/30 to-muted/10">
-        <div className="flex items-center justify-between mb-2">
+      <div className="flex-shrink-0 items-center justify-center border-b p-4 pt-2 h-[63px] pb-0 bg-gradient-to-r from-muted/30 to-muted/10">
+        <div className="flex items-center justify-between mb-2 h-full">
           <div className="flex items-center gap-2">
             {currentOrganization?.iconUrl ? (
               <Avatar className="h-8 w-8">
