@@ -5,6 +5,7 @@ import Department from '@/models/department';
 import Enrollment from '@/models/enrollment';
 import Course from '@/models/course';
 import Organization from '@/models/organization';
+import User from '@/models/user'; // Required so Mongoose can resolve ref: 'User' in populate()
 import mongoose from 'mongoose';
 import { getSignedImageUrl, isS3Url } from '@/lib/s3-utils';
 import { sendWelcomeEmail } from '@/lib/email-service';

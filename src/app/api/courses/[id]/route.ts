@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Course from '@/models/course';
 import Enrollment from '@/models/enrollment';
+import User from '@/models/user'; // Required so Mongoose can resolve ref: 'User' in populate()
 import mongoose from 'mongoose';
 import { getSignedImageUrl, cleanS3Url } from '@/lib/s3-utils';
 
