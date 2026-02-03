@@ -19,6 +19,7 @@ import {
   Search,
   PlayCircle,
   Eye,
+  Share2,
 } from "lucide-react";
 import { generateCourseGradient } from "@/lib/gradient-utils";
 import { useCourses, useEnrollments } from "@/hooks/use-queries";
@@ -56,6 +57,7 @@ export default function EmployeeCoursesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<'my-learning' | 'browse'>('my-learning');
   const [viewAllCourses, setViewAllCourses] = useState(false);
+  const [loadingCertificate, setLoadingCertificate] = useState<string | null>(null);
 
   const isAdmin = currentOrganization?.role === 'admin';
 
@@ -79,6 +81,44 @@ export default function EmployeeCoursesPage() {
 
   const handleCourseClick = (courseId: string) => {
     router.push(`/employee/courses/${courseId}`);
+  };
+
+  const handleShareCertificate = async (e: React.MouseEvent, enrollmentId: string) => {
+    e.stopPropagation(); // Prevent card click
+    setLoadingCertificate(enrollmentId);
+
+    try {
+      // First check if certificate exists, if not create it
+      const checkRes = await fetch(`/api/certificates?enrollmentId=${enrollmentId}`);
+      const checkData = await checkRes.json();
+
+      let certificateId: string;
+
+      if (checkData.certificate) {
+        certificateId = checkData.certificate.certificateId;
+      } else {
+        // Create certificate
+        const createRes = await fetch('/api/certificates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enrollmentId }),
+        });
+        const createData = await createRes.json();
+
+        if (!createRes.ok) {
+          throw new Error(createData.error || 'Failed to create certificate');
+        }
+
+        certificateId = createData.certificate.certificateId;
+      }
+
+      // Navigate to certificate page
+      window.open(`/certificate/${certificateId}`, '_blank');
+    } catch (error) {
+      console.error('Error handling certificate:', error);
+    } finally {
+      setLoadingCertificate(null);
+    }
   };
 
   // Filter enrollments based on search
@@ -368,9 +408,20 @@ export default function EmployeeCoursesPage() {
                           <div className="text-sm text-muted-foreground">
                             {enrollment.course.totalLessons} lessons • {enrollment.course.estimatedDuration} min
                           </div>
-                          <Button className="w-full" size="sm" variant="outline">
-                            Review
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button className="flex-1" size="sm" variant="outline">
+                              Review
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="px-3"
+                              onClick={(e) => handleShareCertificate(e, enrollment._id)}
+                              disabled={loadingCertificate === enrollment._id}
+                            >
+                              <Share2 className={`h-4 w-4 ${loadingCertificate === enrollment._id ? 'animate-pulse' : ''}`} />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
