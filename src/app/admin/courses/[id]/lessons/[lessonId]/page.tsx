@@ -776,6 +776,12 @@ export default function LessonEditorPage() {
                   setFormData({ ...formData, duration: parseInt(e.target.value) || 0 });
                   setHasChanges(true);
                 }}
+                onInput={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  const value = e.target.value;
+                  if (value.startsWith('0') && value.length > 1) {
+                    e.target.value = value.slice(1);
+                  }
+                }}
               />
             </div>
           </CardContent>
