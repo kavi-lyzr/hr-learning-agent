@@ -35,7 +35,12 @@ export async function POST(request: NextRequest) {
         },
         { status: 401 }
       );
-    } else if (!lessonContent && !transcript) {
+    }
+    // Strip HTML tags from content if present
+    const cleanContent = lessonContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    console.log('cleanContent', cleanContent);
+    console.log('transcript', transcript);
+    if (!(cleanContent || transcript)) {
       return NextResponse.json(
         {
           error: 'Lesson content or transcript is required. Please add lesson content or transcript to generate a quiz',
@@ -85,9 +90,6 @@ export async function POST(request: NextRequest) {
     }
 
     const ownerApiKey = decrypt(owner.lyzrApiKey);
-
-    // Strip HTML tags from content if present
-    const cleanContent = lessonContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
     // Build the prompt for quiz generation
     const prompt = `Generate ${numQuestions} multiple-choice quiz questions to assess understanding of the following lesson.
