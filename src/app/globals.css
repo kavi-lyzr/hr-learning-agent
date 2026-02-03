@@ -341,9 +341,9 @@ body {
   --font-sans: var(--font-noto-sans, "Noto Sans"), ui-sans-serif, sans-serif, system-ui;
   --font-serif: var(--font-playfair, "Playfair Display"), ui-serif, serif, system-ui;
   --font-mono: monospace;
-  --radius: 1rem;
+  --radius: 0.5rem;
 
-  /* Enhanced shadows for dark mode depth (LyzrGPT reference) */
+  /* Enhanced shadows for dark mode depth */
   --shadow-2xs: 0px 4px 24px 0px hsl(0 0% 0% / 0.10);
   --shadow-xs: 0px 4px 24px 0px hsl(0 0% 0% / 0.10);
   --shadow-sm: 0px 4px 24px 0px hsl(0 0% 0% / 0.20), 0px 1px 2px -1px hsl(0 0% 0% / 0.20);
