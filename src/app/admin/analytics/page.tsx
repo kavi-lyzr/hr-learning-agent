@@ -84,7 +84,7 @@ export default function AdminAnalyticsPage() {
           </div>
           
           {/* Toggle Button */}
-          <div className="flex items-center gap-3">
+          {/* <div className="flex items-center gap-3">
             <Label htmlFor="show-analytics" className="flex items-center gap-2 cursor-pointer">
               {showAnalytics ? (
                 <Eye className="h-4 w-4" />
@@ -100,12 +100,63 @@ export default function AdminAnalyticsPage() {
               checked={showAnalytics}
               onCheckedChange={setShowAnalytics}
             />
-          </div>
+          </div> */}
         </div>
 
-        <div className="relative">
+        {/* Quick Navigation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+          <Card 
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => router.push('/admin/analytics/events')}
+          >
+            <CardContent className="flex items-center justify-between p-6">
+              <div className="flex items-center gap-3">
+                <Activity className="h-8 w-8 text-primary" />
+                <div>
+                  <h3 className="font-semibold">View All Events</h3>
+                  <p className="text-sm text-muted-foreground">Track all learning activities</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </CardContent>
+          </Card>
+
+          <Card 
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => router.push('/admin/analytics/courses')}
+          >
+            <CardContent className="flex items-center justify-between p-6">
+              <div className="flex items-center gap-3">
+                <BookOpen className="h-8 w-8 text-primary" />
+                <div>
+                  <h3 className="font-semibold">Course Analytics</h3>
+                  <p className="text-sm text-muted-foreground">Select a course to view analytics</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </CardContent>
+          </Card>
+
+          <Card 
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => router.push('/admin/analytics/users')}
+          >
+            <CardContent className="flex items-center justify-between p-6">
+              <div className="flex items-center gap-3">
+                <Users className="h-8 w-8 text-primary" />
+                <div>
+                  <h3 className="font-semibold">User Analytics</h3>
+                  <p className="text-sm text-muted-foreground">Select a user to view analytics</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="relative mt-16">
           {!showAnalytics && (
-            <div className="absolute inset-0 z-10 backdrop-blur-xs bg-background/30 rounded-lg flex items-center justify-center">
+            <div className="absolute inset-0 z-10 backdrop-blur-xs bg-background/40 rounded-lg flex items-center justify-center">
               <Card className="max-w-md mx-4">
                 <CardHeader>
                   <CardTitle className="text-center">Premium Analytics</CardTitle>
@@ -228,7 +279,7 @@ export default function AdminAnalyticsPage() {
           {/* Blurred Charts for Demo - Sales Tool */}
           <div className="relative">
             {/* Ghosted Charts */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-20">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Course Completion Trends</CardTitle>
@@ -274,57 +325,6 @@ export default function AdminAnalyticsPage() {
               </Card>
             </div>
           </div>
-        </div>
-
-        {/* Quick Navigation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-          <Card 
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => router.push('/admin/analytics/events')}
-          >
-            <CardContent className="flex items-center justify-between p-6">
-              <div className="flex items-center gap-3">
-                <Activity className="h-8 w-8 text-primary" />
-                <div>
-                  <h3 className="font-semibold">View All Events</h3>
-                  <p className="text-sm text-muted-foreground">Track all learning activities</p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => router.push('/admin/analytics/courses')}
-          >
-            <CardContent className="flex items-center justify-between p-6">
-              <div className="flex items-center gap-3">
-                <BookOpen className="h-8 w-8 text-primary" />
-                <div>
-                  <h3 className="font-semibold">Course Analytics</h3>
-                  <p className="text-sm text-muted-foreground">Select a course to view analytics</p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => router.push('/admin/analytics/users')}
-          >
-            <CardContent className="flex items-center justify-between p-6">
-              <div className="flex items-center gap-3">
-                <Users className="h-8 w-8 text-primary" />
-                <div>
-                  <h3 className="font-semibold">User Analytics</h3>
-                  <p className="text-sm text-muted-foreground">Select a user to view analytics</p>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </CardContent>
-          </Card>
         </div>
 
 
