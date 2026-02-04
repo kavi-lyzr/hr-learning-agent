@@ -53,17 +53,19 @@ export async function GET(
     });
 
     // 4. Learning Hours (sum of all timeSpent from lesson progress, converted to hours)
-    const lessonProgressRecords = await LessonProgress.find({}).lean();
-
-    // Filter by organization (need to check if lesson belongs to org's courses)
+    // First get all course IDs for this organization
     const orgCourses = await Course.find({
       organizationId: orgObjectId,
     }).select('_id').lean();
 
-    const orgCourseIds = new Set(orgCourses.map(c => c._id.toString()));
+    const orgCourseIds = orgCourses.map(c => c._id);
+
+    // Query only lesson progress records for this organization's courses
+    const lessonProgressRecords = await LessonProgress.find({
+      courseId: { $in: orgCourseIds }
+    }).lean();
 
     const totalSeconds = lessonProgressRecords
-      .filter(lp => lp.courseId && orgCourseIds.has(lp.courseId.toString()))
       .reduce((sum, lp) => sum + (lp.timeSpent || 0), 0);
 
     const learningHours = Math.round(totalSeconds / 3600); // Convert seconds to hours

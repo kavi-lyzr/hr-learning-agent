@@ -38,7 +38,7 @@ interface Lesson {
   _id: string;
   title: string;
   description?: string;
-  contentType: 'video' | 'article' | 'video-article';
+  contentType: 'video' | 'article' | 'video-article' | 'assessment';
   content: {
     videoUrl?: string;
     articleHtml?: string;
@@ -50,6 +50,7 @@ interface Lesson {
   quizData?: {
     questions: QuizQuestion[];
   };
+  isModuleAssessment?: boolean;
 }
 
 interface Module {
@@ -452,6 +453,17 @@ export default function LessonViewerPage() {
     };
   };
 
+  // Auto-start quiz for module assessments
+  useEffect(() => {
+    if (lesson?.contentType === 'assessment' && lesson.hasQuiz && lesson.quizData?.questions.length) {
+      // Auto-start quiz for assessments (no content to view first)
+      // Only auto-start if not already showing results from a previous attempt
+      if (!isQuizActive && !showResults && quizAttempts.length === 0) {
+        handleStartQuiz();
+      }
+    }
+  }, [lesson, quizAttempts]);
+
   const handleStartQuiz = () => {
     if (!currentOrganization || !userId || !lesson) return;
     
@@ -465,14 +477,15 @@ export default function LessonViewerPage() {
     trackEvent({
       organizationId: currentOrganization.id,
       userId,
-      eventType: 'quiz_started',
-      eventName: 'Quiz Started',
+      eventType: lesson.contentType === 'assessment' ? 'assessment_started' : 'quiz_started',
+      eventName: lesson.contentType === 'assessment' ? 'Assessment Started' : 'Quiz Started',
       properties: {
         courseId,
         lessonId: lesson._id,
         lessonTitle: lesson.title,
         quizId: `quiz_${lesson._id}`,
         totalQuestions: lesson.quizData?.questions.length || 0,
+        isModuleAssessment: lesson.isModuleAssessment || false,
       },
       sessionId: sessionIdRef.current,
     });
@@ -518,6 +531,7 @@ export default function LessonViewerPage() {
       setQuizScore(score);
 
       // Submit quiz attempt
+      const isAssessment = lesson.contentType === 'assessment';
       const response = await fetch('/api/quiz-attempts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -531,6 +545,7 @@ export default function LessonViewerPage() {
           score,
           passed: score >= 70, // 70% passing grade
           timeSpent: Math.floor(timeSpent),
+          isModuleAssessment: lesson.isModuleAssessment || false,
         }),
       });
 
@@ -541,13 +556,16 @@ export default function LessonViewerPage() {
       setShowResults(true);
       setIsQuizActive(false);
 
-      // Track quiz completion/failure event
+      // Track quiz/assessment completion/failure event
       const passed = score >= 70;
+      const eventTypeBase = isAssessment ? 'assessment' : 'quiz';
       trackEvent({
         organizationId: currentOrganization?.id || '',
         userId,
-        eventType: passed ? 'quiz_completed' : 'quiz_failed',
-        eventName: passed ? 'Quiz Completed' : 'Quiz Failed',
+        eventType: passed ? `${eventTypeBase}_completed` : `${eventTypeBase}_failed`,
+        eventName: passed 
+          ? (isAssessment ? 'Assessment Completed' : 'Quiz Completed')
+          : (isAssessment ? 'Assessment Failed' : 'Quiz Failed'),
         properties: {
           courseId,
           lessonId: lesson._id,
@@ -559,11 +577,15 @@ export default function LessonViewerPage() {
           attemptNumber: quizAttempts.length + 1,
           timeSpent: Math.floor(timeSpent),
           passed,
+          isModuleAssessment: lesson.isModuleAssessment || false,
         },
         sessionId: sessionIdRef.current,
       });
 
-      toast.success(score >= 70 ? 'Quiz passed!' : 'Quiz submitted');
+      toast.success(score >= 70 
+        ? (isAssessment ? 'Assessment passed!' : 'Quiz passed!')
+        : (isAssessment ? 'Assessment submitted' : 'Quiz submitted')
+      );
     } catch (error: any) {
       console.error('Error submitting quiz:', error);
       toast.error('Failed to submit quiz');
@@ -633,7 +655,9 @@ export default function LessonViewerPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  {lesson.contentType === 'video-article' ? (
+                  {lesson.contentType === 'assessment' ? (
+                    <Award className="h-5 w-5 text-purple-500" />
+                  ) : lesson.contentType === 'video-article' ? (
                     <>
                       <VideoIcon className="h-5 w-5 text-muted-foreground" />
                       <FileText className="h-5 w-5 text-muted-foreground" />
@@ -643,9 +667,15 @@ export default function LessonViewerPage() {
                   ) : (
                     <FileText className="h-5 w-5 text-muted-foreground" />
                   )}
-                  <Badge variant="outline" className="capitalize">
-                    {lesson.contentType.replace('-', ' + ')}
-                  </Badge>
+                  {lesson.contentType === 'assessment' ? (
+                    <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                      Module Assessment
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="capitalize">
+                      {lesson.contentType.replace('-', ' + ')}
+                    </Badge>
+                  )}
                   {isCompleted && (
                     <Badge variant="default" className="gap-1">
                       <CheckCircle className="h-3 w-3" />
@@ -704,8 +734,8 @@ export default function LessonViewerPage() {
           </Card>
         )}
 
-        {/* No Content Fallback */}
-        {!lesson.content.videoUrl && !lesson.content.articleHtml && (
+        {/* No Content Fallback - Don't show for assessments as they only have quiz */}
+        {!lesson.content.videoUrl && !lesson.content.articleHtml && lesson.contentType !== 'assessment' && (
           <Card>
             <CardContent className="p-12 text-center text-muted-foreground">
               No content available for this lesson
@@ -713,8 +743,8 @@ export default function LessonViewerPage() {
           </Card>
         )}
 
-        {/* Progress Indicator */}
-        {!isCompleted && (
+        {/* Progress Indicator - Hide for assessments since they're completed by passing quiz */}
+        {!isCompleted && lesson.contentType !== 'assessment' && (
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-2">
@@ -754,8 +784,10 @@ export default function LessonViewerPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Award className="h-5 w-5 text-primary" />
-                  <CardTitle>Knowledge Check Quiz</CardTitle>
+                  <Award className={`h-5 w-5 ${lesson.contentType === 'assessment' ? 'text-purple-500' : 'text-primary'}`} />
+                  <CardTitle>
+                    {lesson.contentType === 'assessment' ? 'Module Assessment' : 'Knowledge Check Quiz'}
+                  </CardTitle>
                 </div>
                 {quizAttempts.length > 0 && (
                   <Badge variant={quizAttempts[0].passed ? 'default' : 'secondary'}>
@@ -774,12 +806,14 @@ export default function LessonViewerPage() {
               {!isQuizActive && !showResults ? (
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Test your understanding with {lesson.quizData.questions.length} multiple-choice questions.
-                    You need 70% or higher to pass.
+                    {lesson.contentType === 'assessment' 
+                      ? `Complete this assessment with ${lesson.quizData.questions.length} questions. You need 70% or higher to pass.`
+                      : `Test your understanding with ${lesson.quizData.questions.length} multiple-choice questions. You need 70% or higher to pass.`
+                    }
                   </p>
                   <Button onClick={handleStartQuiz} size="lg" className="w-full sm:w-auto">
                     <Award className="h-4 w-4 mr-2" />
-                    {quizAttempts.length > 0 ? 'Retake Quiz' : 'Start Quiz'}
+                    {quizAttempts.length > 0 ? (lesson.contentType === 'assessment' ? 'Retake Assessment' : 'Retake Quiz') : (lesson.contentType === 'assessment' ? 'Start Assessment' : 'Start Quiz')}
                   </Button>
                 </div>
               ) : isQuizActive ? (

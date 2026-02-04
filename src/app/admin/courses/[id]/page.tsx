@@ -19,6 +19,23 @@ import { uploadImageToS3 } from "@/lib/s3-utils";
 import { useOrganization } from "@/lib/OrganizationProvider";
 import { useInvalidateQueries } from "@/hooks/use-queries";
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   ChevronLeft,
   Plus,
   Edit,
@@ -33,13 +50,14 @@ import {
   Image as ImageIcon,
   X,
   Pencil,
+  ClipboardCheck,
 } from "lucide-react";
 
 interface Lesson {
   _id?: string;
   title: string;
   description?: string;
-  contentType: 'video' | 'article' | 'video-article';
+  contentType: 'video' | 'article' | 'video-article' | 'assessment';
   content: {
     videoUrl?: string;
     transcript?: any[];
@@ -50,6 +68,106 @@ interface Lesson {
   order: number;
   hasQuiz: boolean;
   quizData?: any;
+  isModuleAssessment?: boolean;
+}
+
+// Sortable Lesson Item Component
+function SortableLessonItem({
+  lesson,
+  lessonIndex,
+  moduleId,
+  onEdit,
+  onDelete,
+}: {
+  lesson: Lesson;
+  lessonIndex: number;
+  moduleId: string;
+  onEdit: (moduleId: string, lesson: Lesson) => void;
+  onDelete: (moduleId: string, lessonId: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: lesson._id || `lesson-${lessonIndex}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const isAssessment = lesson.contentType === 'assessment';
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-4 p-3 rounded-lg border hover:bg-accent/50 transition-colors group ${isDragging ? 'shadow-lg bg-background z-50' : ''}`}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing touch-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div 
+        className="flex items-center gap-2 flex-1 cursor-pointer"
+        onClick={() => onEdit(moduleId, lesson)}
+      >
+        <div className="flex items-center gap-2">
+          {isAssessment ? (
+            <ClipboardCheck className="h-4 w-4 text-purple-500" />
+          ) : lesson.contentType === 'video' || lesson.contentType === 'video-article' ? (
+            <Video className="h-4 w-4 text-blue-500" />
+          ) : (
+            <FileText className="h-4 w-4 text-green-500" />
+          )}
+        </div>
+        <div className="flex-1">
+          <div className="font-medium group-hover:text-primary transition-colors">
+            {lessonIndex + 1}. {lesson.title}
+          </div>
+          {lesson.description && (
+            <div className="text-sm text-muted-foreground line-clamp-1">
+              {lesson.description}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <span>{lesson.duration} min</span>
+          {isAssessment ? (
+            <Badge variant="secondary" className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Assessment</Badge>
+          ) : lesson.hasQuiz && (
+            <Badge variant="secondary">Quiz</Badge>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(moduleId, lesson)}
+        >
+          <Edit className="h-3 w-3 mr-1" />
+          Edit
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(moduleId, lesson._id!)}
+          className="text-destructive hover:text-destructive h-8 w-8"
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 interface Module {
@@ -124,6 +242,18 @@ export default function CourseDetailPage() {
     description: '',
     contentType: 'article' as 'video' | 'article' | 'video-article',
   });
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Start dragging after moving 8px
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     fetchCourse();
@@ -449,6 +579,38 @@ export default function CourseDetailPage() {
     });
   };
 
+  const handleDragEnd = (event: DragEndEvent, moduleId: string) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      if (!course) return;
+
+      const updatedModules = course.modules.map(module => {
+        if (module._id === moduleId) {
+          const oldIndex = module.lessons.findIndex(l => l._id === active.id);
+          const newIndex = module.lessons.findIndex(l => l._id === over.id);
+
+          if (oldIndex !== -1 && newIndex !== -1) {
+            const newLessons = arrayMove(module.lessons, oldIndex, newIndex).map((l, idx) => ({
+              ...l,
+              order: idx,
+            }));
+            return { ...module, lessons: newLessons };
+          }
+        }
+        return module;
+      });
+
+      setCourse({ ...course, modules: updatedModules });
+      setHasChanges(true);
+      toast.success('Lesson order updated');
+    }
+  };
+
+  const handleAddAssessment = (moduleId: string) => {
+    router.push(`/admin/courses/${courseId}/lessons/new?moduleId=${moduleId}&type=assessment`);
+  };
+
   if (loading) {
     return (
       <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 w-full">
@@ -680,74 +842,69 @@ export default function CourseDetailPage() {
                         {module.lessons.length === 0 ? (
                           <div className="text-center py-8 border-2 border-dashed rounded-lg">
                             <p className="text-sm text-muted-foreground mb-3">No lessons yet</p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleAddLesson(module._id!)}
-                            >
-                              <Plus className="h-3 w-3 mr-2" />
-                              Add Lesson
-                            </Button>
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddLesson(module._id!)}
+                              >
+                                <Plus className="h-3 w-3 mr-2" />
+                                Add Lesson
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddAssessment(module._id!)}
+                                className="text-purple-600 hover:text-purple-700 border-purple-200 hover:border-purple-300"
+                              >
+                                <ClipboardCheck className="h-3 w-3 mr-2" />
+                                Add Assessment
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {module.lessons.map((lesson, lessonIndex) => (
-                              <div
-                                key={lesson._id}
-                                className="flex items-center gap-4 p-3 rounded-lg border hover:bg-accent/50 transition-colors group cursor-pointer"
-                                onClick={() => handleEditLesson(module._id!, lesson)}
-                              >
-                                <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                                <div className="flex items-center gap-2">
-                                  {lesson.contentType === 'video' || lesson.contentType === 'video-article' ? (
-                                    <Video className="h-4 w-4 text-blue-500" />
-                                  ) : (
-                                    <FileText className="h-4 w-4 text-green-500" />
-                                  )}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="font-medium group-hover:text-primary transition-colors">
-                                    {lessonIndex + 1}. {lesson.title}
-                                  </div>
-                                  {lesson.description && (
-                                    <div className="text-sm text-muted-foreground line-clamp-1">
-                                      {lesson.description}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <span>{lesson.duration} min</span>
-                                  {lesson.hasQuiz && <Badge variant="secondary">Quiz</Badge>}
-                                </div>
-                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleEditLesson(module._id!, lesson)}
-                                  >
-                                    <Edit className="h-3 w-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDeleteLesson(module._id!, lesson._id!)}
-                                    className="text-destructive hover:text-destructive h-8 w-8"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleAddLesson(module._id!)}
-                              className="w-full mt-2"
+                            <DndContext
+                              sensors={sensors}
+                              collisionDetection={closestCenter}
+                              onDragEnd={(event) => handleDragEnd(event, module._id!)}
                             >
-                              <Plus className="h-3 w-3 mr-2" />
-                              Add Lesson
-                            </Button>
+                              <SortableContext
+                                items={module.lessons.map(l => l._id || `lesson-${l.order}`)}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                {module.lessons.map((lesson, lessonIndex) => (
+                                  <SortableLessonItem
+                                    key={lesson._id || `lesson-${lessonIndex}`}
+                                    lesson={lesson}
+                                    lessonIndex={lessonIndex}
+                                    moduleId={module._id!}
+                                    onEdit={handleEditLesson}
+                                    onDelete={handleDeleteLesson}
+                                  />
+                                ))}
+                              </SortableContext>
+                            </DndContext>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddLesson(module._id!)}
+                                className="flex-1"
+                              >
+                                <Plus className="h-3 w-3 mr-2" />
+                                Add Lesson
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddAssessment(module._id!)}
+                                className="flex-1 text-purple-600 hover:text-purple-700 border-purple-200 hover:border-purple-300"
+                              >
+                                <ClipboardCheck className="h-3 w-3 mr-2" />
+                                Add Assessment
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </CardContent>

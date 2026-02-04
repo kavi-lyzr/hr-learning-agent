@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import OrganizationMember from '@/models/organizationMember';
+import User from '@/models/user'; // Required so Mongoose can resolve ref: 'User' in populate()
 import mongoose from 'mongoose';
 
 /**

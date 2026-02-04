@@ -5,7 +5,6 @@ import AnalyticsEvent from '@/models/analyticsEvent';
 import Enrollment from '@/models/enrollment';
 import QuizAttempt from '@/models/quizAttempt';
 import Course from '@/models/course';
-import Lesson from '@/models/lesson';
 import mongoose from 'mongoose';
 
 export async function GET(
@@ -18,9 +17,9 @@ export async function GET(
 
     await dbConnect();
 
-    // Ensure models are loaded for populate to work
+    // Ensure Course model is registered for populate operations
+    // This prevents "Schema hasn't been registered" errors during hot reload
     Course;
-    Lesson;
 
     const period = searchParams.get('period') || 'weekly';
     const startDate = searchParams.get('startDate');
@@ -80,13 +79,22 @@ export async function GET(
           eventType: 'course_completed',
         }),
 
-        // Quiz attempts
+        // Quiz attempts - populate course only (lessons are embedded in courses)
         QuizAttempt.find({ userId })
-          .populate('courseId', 'title')
-          .populate('lessonId', 'title')
+          .populate('courseId', 'title modules')
           .sort({ completedAt: -1 })
           .lean(),
       ]);
+
+      // Helper function to find lesson title from embedded lessons in course
+      const getLessonTitle = (course: any, lessonId: string): string => {
+        if (!course?.modules) return 'Unknown Lesson';
+        for (const module of course.modules) {
+          const lesson = module.lessons?.find((l: any) => l._id?.toString() === lessonId);
+          if (lesson) return lesson.title;
+        }
+        return 'Unknown Lesson';
+      };
 
       // Calculate engagement level
       const totalTimeSpent = timeSpentResult[0]?.totalTime || 0;
@@ -97,20 +105,21 @@ export async function GET(
       // Calculate quiz statistics
       const totalQuizAttempts = quizAttempts.length;
       const passedQuizzes = quizAttempts.filter((q: any) => q.passed).length;
-      const avgQuizScore = quizAttempts.length > 0 
-        ? quizAttempts.reduce((sum: number, q: any) => sum + q.score, 0) / quizAttempts.length 
+      const avgQuizScore = quizAttempts.length > 0
+        ? quizAttempts.reduce((sum: number, q: any) => sum + q.score, 0) / quizAttempts.length
         : (quizScoreResult[0]?.avgScore || 0);
-      
+
       // Find knowledge gaps (quizzes with low scores)
       const knowledgeGaps = quizAttempts
         .filter((q: any) => q.score < 70)
         .slice(0, 5)
         .map((q: any) => ({
           courseTitle: q.courseId?.title || 'Unknown Course',
-          lessonTitle: q.lessonId?.title || 'Unknown Lesson',
+          lessonTitle: getLessonTitle(q.courseId, q.lessonId?.toString()),
           score: q.score,
           attemptNumber: q.attemptNumber,
           completedAt: q.completedAt,
+          isModuleAssessment: q.isModuleAssessment || false,
         }));
 
       const realTimeAnalytics = {
@@ -131,12 +140,13 @@ export async function GET(
           avgScore: Math.round(avgQuizScore * 10) / 10,
           recentAttempts: quizAttempts.slice(0, 10).map((q: any) => ({
             courseTitle: q.courseId?.title || 'Unknown Course',
-            lessonTitle: q.lessonId?.title || 'Unknown Lesson',
+            lessonTitle: getLessonTitle(q.courseId, q.lessonId?.toString()),
             score: q.score,
             passed: q.passed,
             attemptNumber: q.attemptNumber,
             timeSpent: q.timeSpent,
             completedAt: q.completedAt,
+            isModuleAssessment: q.isModuleAssessment || false,
           })),
         },
         realTime: true,

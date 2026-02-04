@@ -7,6 +7,9 @@ export type EventType =
   | 'quiz_started'
   | 'quiz_completed'
   | 'quiz_failed'
+  | 'assessment_started'
+  | 'assessment_completed'
+  | 'assessment_failed'
   | 'course_enrolled'
   | 'course_completed'
   | 'time_spent_updated';
@@ -38,6 +41,9 @@ const AnalyticsEventSchema = new Schema<IAnalyticsEvent>({
       'quiz_started',
       'quiz_completed',
       'quiz_failed',
+      'assessment_started',
+      'assessment_completed',
+      'assessment_failed',
       'course_enrolled',
       'course_completed',
       'time_spent_updated',
