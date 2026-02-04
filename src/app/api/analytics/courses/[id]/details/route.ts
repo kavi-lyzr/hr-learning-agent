@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AnalyticsEvent from '@/models/analyticsEvent';
 import Course from '@/models/course';
-import Module from '@/models/module';
-import Lesson from '@/models/lesson';
 import Enrollment from '@/models/enrollment';
 
 export async function GET(
@@ -60,9 +58,6 @@ export async function GET(
       : 0;
 
     // Calculate quiz metrics
-    const quizEvents = courseEvents.filter(
-      (e) => e.eventType === 'quiz_completed' || e.eventType === 'quiz_failed'
-    );
     const passedQuizzes = courseEvents.filter((e) => e.eventType === 'quiz_completed');
     const avgQuizScore = passedQuizzes.length > 0
       ? passedQuizzes.reduce((sum, e) => sum + (e.properties.score || 0), 0) / passedQuizzes.length
@@ -71,85 +66,99 @@ export async function GET(
     // Calculate total time spent
     const totalTimeSpent = enrollments.reduce((sum, e: any) => sum + (e.timeSpent || 0), 0);
 
-    // Get modules and lessons for this course
-    const modules = await Module.find({ courseId }).lean();
-    const lessons = await Lesson.find({ 
-      moduleId: { $in: modules.map((m) => m._id) } 
-    }).lean();
+    // Extract all lessons from embedded modules in the course
+    const lessons: Array<{ _id: any; title: string; hasQuiz: boolean; moduleTitle: string; isModuleAssessment?: boolean }> = [];
+    if (course.modules) {
+      for (const module of course.modules as any[]) {
+        if (module.lessons) {
+          for (const lesson of module.lessons) {
+            lessons.push({
+              _id: lesson._id,
+              title: lesson.title,
+              hasQuiz: lesson.hasQuiz || false,
+              moduleTitle: module.title,
+              isModuleAssessment: lesson.isModuleAssessment || false,
+            });
+          }
+        }
+      }
+    }
 
     // Calculate lesson-level metrics
-    const lessonMetrics = await Promise.all(
-      lessons.map(async (lesson) => {
-        const lessonStartEvents = courseEvents.filter(
-          (e) => e.eventType === 'lesson_started' && e.properties.lessonId === lesson._id.toString()
+    const lessonMetrics = lessons.map((lesson) => {
+      const lessonIdStr = lesson._id?.toString();
+      const lessonStartEvents = courseEvents.filter(
+        (e) => e.eventType === 'lesson_started' && e.properties.lessonId === lessonIdStr
+      );
+      const lessonCompletedEvents = courseEvents.filter(
+        (e) => e.eventType === 'lesson_completed' && e.properties.lessonId === lessonIdStr
+      );
+
+      const starts = lessonStartEvents.length;
+      const completions = lessonCompletedEvents.length;
+      const completionRate = starts > 0 ? (completions / starts) * 100 : 0;
+      const dropoffRate = starts > 0 ? ((starts - completions) / starts) * 100 : 0;
+
+      // Calculate average time spent on this lesson
+      const timeSpentEvents = courseEvents.filter(
+        (e) => e.eventType === 'time_spent_updated' && e.properties.lessonId === lessonIdStr
+      );
+      const avgTimeSpent = timeSpentEvents.length > 0
+        ? timeSpentEvents.reduce((sum, e) => sum + (e.properties.timeSpent || 0), 0) / timeSpentEvents.length
+        : 0;
+
+      return {
+        lessonId: lessonIdStr,
+        lessonTitle: lesson.title,
+        moduleTitle: lesson.moduleTitle,
+        starts,
+        completions,
+        completionRate,
+        avgTimeSpent,
+        dropoffRate,
+        isModuleAssessment: lesson.isModuleAssessment,
+      };
+    });
+
+    // Calculate quiz-level metrics (group by lesson)
+    const quizMetrics = lessons
+      .filter((lesson) => lesson.hasQuiz)
+      .map((lesson) => {
+        const lessonIdStr = lesson._id?.toString();
+        const quizAttempts = courseEvents.filter(
+          (e) =>
+            (e.eventType === 'quiz_completed' || e.eventType === 'quiz_failed') &&
+            e.properties.lessonId === lessonIdStr
         );
-        const lessonCompletedEvents = courseEvents.filter(
-          (e) => e.eventType === 'lesson_completed' && e.properties.lessonId === lesson._id.toString()
+        const quizPasses = courseEvents.filter(
+          (e) =>
+            e.eventType === 'quiz_completed' && e.properties.lessonId === lessonIdStr
+        );
+        const quizFailures = courseEvents.filter(
+          (e) =>
+            e.eventType === 'quiz_failed' && e.properties.lessonId === lessonIdStr
         );
 
-        const starts = lessonStartEvents.length;
-        const completions = lessonCompletedEvents.length;
-        const completionRate = starts > 0 ? (completions / starts) * 100 : 0;
-        const dropoffRate = starts > 0 ? ((starts - completions) / starts) * 100 : 0;
-
-        // Calculate average time spent on this lesson
-        const timeSpentEvents = courseEvents.filter(
-          (e) => e.eventType === 'time_spent_updated' && e.properties.lessonId === lesson._id.toString()
-        );
-        const avgTimeSpent = timeSpentEvents.length > 0
-          ? timeSpentEvents.reduce((sum, e) => sum + (e.properties.timeSpent || 0), 0) / timeSpentEvents.length
+        const attempts = quizAttempts.length;
+        const passes = quizPasses.length;
+        const failures = quizFailures.length;
+        const passRate = attempts > 0 ? (passes / attempts) * 100 : 0;
+        const avgScore = quizPasses.length > 0
+          ? quizPasses.reduce((sum, e) => sum + (e.properties.score || 0), 0) / quizPasses.length
           : 0;
 
         return {
-          lessonId: lesson._id.toString(),
+          lessonId: lessonIdStr,
           lessonTitle: lesson.title,
-          starts,
-          completions,
-          completionRate,
-          avgTimeSpent,
-          dropoffRate,
+          moduleTitle: lesson.moduleTitle,
+          attempts,
+          passes,
+          failures,
+          passRate,
+          avgScore,
+          isModuleAssessment: lesson.isModuleAssessment,
         };
-      })
-    );
-
-    // Calculate quiz-level metrics (group by lesson)
-    const quizMetrics = await Promise.all(
-      lessons
-        .filter((lesson) => lesson.hasQuiz)
-        .map(async (lesson) => {
-          const quizAttempts = courseEvents.filter(
-            (e) =>
-              (e.eventType === 'quiz_completed' || e.eventType === 'quiz_failed') &&
-              e.properties.lessonId === lesson._id.toString()
-          );
-          const quizPasses = courseEvents.filter(
-            (e) =>
-              e.eventType === 'quiz_completed' && e.properties.lessonId === lesson._id.toString()
-          );
-          const quizFailures = courseEvents.filter(
-            (e) =>
-              e.eventType === 'quiz_failed' && e.properties.lessonId === lesson._id.toString()
-          );
-
-          const attempts = quizAttempts.length;
-          const passes = quizPasses.length;
-          const failures = quizFailures.length;
-          const passRate = attempts > 0 ? (passes / attempts) * 100 : 0;
-          const avgScore = quizPasses.length > 0
-            ? quizPasses.reduce((sum, e) => sum + (e.properties.score || 0), 0) / quizPasses.length
-            : 0;
-
-          return {
-            lessonId: lesson._id.toString(),
-            lessonTitle: lesson.title,
-            attempts,
-            passes,
-            failures,
-            passRate,
-            avgScore,
-          };
-        })
-    );
+      });
 
     // Engagement trend (last 30 days)
     const engagementTrend = [];

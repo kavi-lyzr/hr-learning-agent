@@ -62,7 +62,9 @@ export default function UsersAnalyticsPage() {
     fetchMembers();
   }, [currentOrganization?.id]);
 
-  const getUserId = (member: OrganizationMember) => {
+  const getUserId = (member: OrganizationMember): string | null => {
+    // Handle case where user hasn't logged in yet (invited members)
+    if (!member.userId) return null;
     if (typeof member.userId === 'object') {
       return (member.userId as any)._id?.toString() || (member.userId as any).toString();
     }
@@ -148,12 +150,13 @@ export default function UsersAnalyticsPage() {
                   const userId = getUserId(member);
                   const userName = typeof member.userId === 'object' ? member.userId.name : 'Unknown User';
                   const userEmail = member.email || (typeof member.userId === 'object' ? member.userId.email : 'No email');
-                  
+                  const hasUserAccount = userId !== null;
+
                   return (
                     <div
                       key={member._id}
-                      className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => router.push(`/admin/analytics/users/${userId}`)}
+                      className={`border rounded-lg p-4 transition-shadow ${hasUserAccount ? 'hover:shadow-md cursor-pointer' : 'opacity-60'}`}
+                      onClick={() => hasUserAccount && router.push(`/admin/analytics/users/${userId}`)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
@@ -177,10 +180,14 @@ export default function UsersAnalyticsPage() {
                             </p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm">
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          View Analytics
-                        </Button>
+                        {hasUserAccount ? (
+                          <Button variant="outline" size="sm">
+                            <BarChart3 className="h-4 w-4 mr-2" />
+                            View Analytics
+                          </Button>
+                        ) : (
+                          <Badge variant="secondary">Pending Login</Badge>
+                        )}
                       </div>
 
                       {/* Analytics Preview */}

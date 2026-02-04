@@ -42,10 +42,13 @@ export async function GET(
     const completedCourses = enrollments.filter((e) => e.completedAt).length;
     const inProgressCourses = enrollments.filter((e) => !e.completedAt).length;
 
-    // Get all lesson progress
+    // Get course IDs for this organization's enrollments
+    const enrolledCourseIds = enrollments.map((e: any) => e.courseId?._id || e.courseId).filter(Boolean);
+
+    // Get all lesson progress for enrolled courses (LessonProgress doesn't have organizationId)
     const lessonProgress = await LessonProgress.find({
       userId,
-      organizationId,
+      courseId: { $in: enrolledCourseIds },
     }).lean();
 
     const totalLessonsCompleted = lessonProgress.filter((lp) => lp.completedAt).length;
@@ -61,10 +64,17 @@ export async function GET(
       ? quizAttempts.reduce((sum, qa) => sum + qa.score, 0) / quizAttempts.length
       : 0;
 
+    // Helper function to count total lessons in a course (lessons are embedded in modules)
+    const getTotalLessonsInCourse = (course: any): number => {
+      if (!course?.modules) return 0;
+      return course.modules.reduce((sum: number, mod: any) =>
+        sum + (mod.lessons?.length || 0), 0);
+    };
+
     // Calculate overall completion rate
     const totalLessons = enrollments.reduce((sum, e: any) => {
-      if (e.courseId && e.courseId.lessonsCount) {
-        return sum + e.courseId.lessonsCount;
+      if (e.courseId) {
+        return sum + getTotalLessonsInCourse(e.courseId);
       }
       return sum;
     }, 0);
@@ -111,14 +121,15 @@ export async function GET(
       enrollments.map(async (enrollment: any) => {
         const courseId = enrollment.courseId._id || enrollment.courseId;
         const course = enrollment.courseId.title ? enrollment.courseId : await Course.findById(courseId).lean();
-        
+
         const courseLessons = await LessonProgress.find({
           userId,
           courseId,
         }).lean();
 
         const completedLessons = courseLessons.filter((lp) => lp.completedAt).length;
-        const totalLessons = course?.lessonsCount || courseLessons.length;
+        // Calculate total lessons from embedded modules (lessonsCount doesn't exist on Course)
+        const totalLessons = getTotalLessonsInCourse(course) || courseLessons.length;
         const progress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
 
         // Get last activity

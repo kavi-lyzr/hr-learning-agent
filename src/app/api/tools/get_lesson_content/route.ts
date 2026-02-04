@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
-import Lesson from '@/models/lesson';
+import Course from '@/models/course';
 import { validateToolToken } from '@/lib/middleware/tool-auth';
 import mongoose from 'mongoose';
 
@@ -46,28 +46,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch lesson
-    const lesson = await Lesson.findById(lessonId).lean();
+    // Find the lesson by searching through courses in this organization
+    // Lessons are embedded in Course.modules[].lessons[]
+    const courses = await Course.find({ organizationId }).lean();
 
-    if (!lesson) {
+    let foundLesson: any = null;
+    let foundCourse: any = null;
+    let foundModule: any = null;
+
+    for (const course of courses) {
+      if (!course.modules) continue;
+      for (const module of course.modules as any[]) {
+        if (!module.lessons) continue;
+        const lesson = module.lessons.find(
+          (l: any) => l._id?.toString() === lessonId
+        );
+        if (lesson) {
+          foundLesson = lesson;
+          foundCourse = course;
+          foundModule = module;
+          break;
+        }
+      }
+      if (foundLesson) break;
+    }
+
+    if (!foundLesson) {
       return NextResponse.json(
         { error: 'Lesson not found' },
         { status: 404 }
       );
     }
 
-    // Verify lesson belongs to the organization
-    if (lesson.organizationId.toString() !== organizationId) {
-      return NextResponse.json(
-        { error: 'Lesson does not belong to this organization' },
-        { status: 403 }
-      );
-    }
-
     // Extract article text from HTML (strip tags)
     let articleText = '';
-    if (lesson.contentData?.articleHtml) {
-      articleText = lesson.contentData.articleHtml
+    if (foundLesson.content?.articleHtml) {
+      articleText = foundLesson.content.articleHtml
         .replace(/<[^>]*>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -75,33 +89,42 @@ export async function POST(request: NextRequest) {
 
     // Build response
     const response: any = {
-      lessonId: lesson._id.toString(),
-      title: lesson.title,
-      description: lesson.description || '',
-      contentType: lesson.contentType,
+      lessonId: foundLesson._id.toString(),
+      title: foundLesson.title,
+      description: foundLesson.description || '',
+      contentType: foundLesson.contentType,
+      courseId: foundCourse._id.toString(),
+      courseTitle: foundCourse.title,
+      moduleId: foundModule._id?.toString(),
+      moduleTitle: foundModule.title,
     };
 
-    if (lesson.contentType === 'article') {
+    if (foundLesson.contentType === 'article' || foundLesson.contentType === 'video-article') {
       response.articleText = articleText;
-      response.wordCount = articleText.split(/\s+/).length;
+      response.wordCount = articleText.split(/\s+/).filter(Boolean).length;
     }
 
-    if (lesson.contentType === 'video') {
-      response.videoUrl = lesson.contentData?.videoUrl || '';
-      response.videoDuration = lesson.contentData?.videoDuration || 0;
+    if (foundLesson.contentType === 'video' || foundLesson.contentType === 'video-article') {
+      response.videoUrl = foundLesson.content?.videoUrl || '';
+      response.videoDuration = foundLesson.duration || 0;
 
-      if (includeTranscript && lesson.contentData?.transcript) {
-        response.transcript = lesson.contentData.transcript;
+      if (includeTranscript && foundLesson.content?.transcript) {
+        response.transcript = foundLesson.content.transcript;
       }
     }
 
     // Include quiz information if available
-    if (lesson.hasQuiz && lesson.quizData) {
+    if (foundLesson.hasQuiz && foundLesson.quizData) {
       response.hasQuiz = true;
-      response.quizQuestionCount = lesson.quizData.questions?.length || 0;
+      response.quizQuestionCount = foundLesson.quizData.questions?.length || 0;
     }
 
-    console.log(`✅ Tool call: get_lesson_content - Returned lesson: ${lesson.title}`);
+    // Include assessment flag
+    if (foundLesson.isModuleAssessment) {
+      response.isModuleAssessment = true;
+    }
+
+    console.log(`✅ Tool call: get_lesson_content - Returned lesson: ${foundLesson.title}`);
 
     return NextResponse.json(response);
 
