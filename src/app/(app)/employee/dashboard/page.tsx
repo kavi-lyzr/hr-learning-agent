@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -18,7 +18,9 @@ import {
   Award,
   PlayCircle,
   ArrowRight,
+  Share2,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { generateCourseGradient } from "@/lib/gradient-utils";
 
 interface Enrollment {
@@ -47,6 +49,7 @@ export default function EmployeeDashboard() {
   const { trackEvent } = useAnalytics();
   const sessionIdRef = useRef(uuidv4());
   const hasTrackedPageView = useRef(false);
+  const [loadingCertificate, setLoadingCertificate] = useState<string | null>(null);
 
   // Use React Query for data fetching with caching
   const {
@@ -99,8 +102,35 @@ export default function EmployeeDashboard() {
     .filter(e => e.status === 'in-progress')
     .sort((a, b) => b.progressPercentage - a.progressPercentage)[0];
 
+  const handleShareCertificate = async (e: React.MouseEvent, enrollmentId: string) => {
+    e.stopPropagation();
+    setLoadingCertificate(enrollmentId);
+    try {
+      const checkRes = await fetch(`/api/certificates?enrollmentId=${enrollmentId}`);
+      const checkData = await checkRes.json();
+      let certificateId: string;
+      if (checkData.certificate) {
+        certificateId = checkData.certificate.certificateId;
+      } else {
+        const createRes = await fetch('/api/certificates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enrollmentId }),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) throw new Error(createData.error || 'Failed to create certificate');
+        certificateId = createData.certificate.certificateId;
+      }
+      window.open(`/certificate/${certificateId}`, '_blank');
+    } catch (error) {
+      console.error('Error handling certificate:', error);
+    } finally {
+      setLoadingCertificate(null);
+    }
+  };
+
   return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20 w-full">
+    <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/20 w-full @container">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Page Header */}
         <div>
@@ -237,7 +267,7 @@ export default function EmployeeDashboard() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 @lg:grid-cols-2 @2xl:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
                 <Card key={i}>
                   <CardHeader>
@@ -269,7 +299,7 @@ export default function EmployeeDashboard() {
               </div>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 @lg:grid-cols-2 @2xl:grid-cols-3 gap-6">
               {validEnrollments.slice(0, 6).map((enrollment) => (
                 <Card
                   key={enrollment._id}
@@ -294,9 +324,13 @@ export default function EmployeeDashboard() {
                   </div>
                   <CardContent className="pt-4">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs px-2 py-1 bg-muted rounded-full capitalize">
-                        {enrollment.course.category.replace('-', ' ')}
-                      </span>
+                      {enrollment.status === 'completed' ? (
+                        <Badge variant="default">Completed</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="capitalize">
+                          {enrollment.course.category.replace('-', ' ')}
+                        </Badge>
+                      )}
                     </div>
                     <CardTitle className="text-base mb-3">{enrollment.course.title}</CardTitle>
                     <div className="space-y-3">
@@ -309,9 +343,26 @@ export default function EmployeeDashboard() {
                           {enrollment.progressPercentage}% complete
                         </p>
                       </div>
-                      <Button className="w-full" variant="outline" size="sm">
-                        {enrollment.status === 'completed' ? 'Review' : enrollment.status === 'in-progress' ? 'Continue' : 'Start'}
-                      </Button>
+                      {enrollment.status === 'completed' ? (
+                        <div className="flex gap-2">
+                          <Button className="flex-1" variant="outline" size="sm">
+                            Review
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="px-3"
+                            onClick={(e) => handleShareCertificate(e, enrollment._id)}
+                            disabled={loadingCertificate === enrollment._id}
+                          >
+                            <Share2 className={`h-4 w-4 ${loadingCertificate === enrollment._id ? 'animate-pulse' : ''}`} />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button className="w-full" variant="outline" size="sm">
+                          {enrollment.status === 'in-progress' ? 'Continue' : 'Start'}
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

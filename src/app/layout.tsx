@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Noto_Sans, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
-import { AuthProvider } from "@/lib/AuthProvider";
-import { OrganizationProvider } from "@/lib/OrganizationProvider";
 import { QueryProvider } from "@/lib/QueryProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { PostHogProvider } from "@/components/Posthog-provider";
@@ -74,14 +72,10 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <QueryProvider>
-              <AuthProvider>
-                <OrganizationProvider>
-                  <main className="w-full min-w-full">
-                    {children}
-                    <Toaster />
-                  </main>
-                </OrganizationProvider>
-              </AuthProvider>
+              <main className="w-full min-w-full">
+                {children}
+                <Toaster />
+              </main>
             </QueryProvider>
           </ThemeProvider>
         </PostHogProvider>

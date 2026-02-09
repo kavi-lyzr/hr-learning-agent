@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 import Cookies from 'js-cookie';
+import { useRouter } from "next/navigation";
 
 export interface TokenData {
   _id: string;
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [totalCredits, setTotalCredits] = useState<number>(0);
   const [usedCredits, setUsedCredits] = useState<number>(0);
   const [pagosToken, setPagosToken] = useState<string | null>(null);
+  const router = useRouter();
 
   // Prevent duplicate auth calls
   const authCallInProgress = useRef(false);
@@ -172,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           // Redirect to organizations page after successful auth (only on first login)
           if (window.location.pathname === '/') {
-            window.history.pushState({}, '', '/organizations');
+            router.push('/organizations');
           }
         } else {
           console.error('Failed to sync with backend');
