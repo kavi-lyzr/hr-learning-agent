@@ -2,37 +2,25 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { BookOpen, Users, Sparkles, Loader2 } from "lucide-react";
+import { BookOpen, Users, Sparkles } from "lucide-react";
 import Image from "next/image";
-import { useAuth } from "@/lib/AuthProvider";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function Home() {
-  const { isAuthenticated, isLoading, login } = useAuth();
   const router = useRouter();
 
-  // Redirect to organizations if already authenticated
+  // When Lyzr SDK redirects back to /?token=..., send user to /auth so AuthProvider can process the token
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.push('/organizations');
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      const query = params.toString();
+      router.replace(`/auth${query ? `?${query}` : ""}`);
     }
-  }, [isAuthenticated, isLoading, router]);
-
-  const handleSignIn = async () => {
-    await login();
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -50,7 +38,9 @@ export default function Home() {
             />
             <span className="text-xl font-semibold">L&D Platform</span>
           </div>
-          <Button onClick={handleSignIn}>Sign in with Lyzr</Button>
+          <Button asChild>
+            <Link href="/auth">Sign in with Lyzr</Link>
+          </Button>
         </div>
       </header>
 
@@ -71,8 +61,8 @@ export default function Home() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="text-lg px-8" onClick={handleSignIn}>
-              Get Started
+            <Button size="lg" className="text-lg px-8" asChild>
+              <Link href="/auth">Get Started</Link>
             </Button>
             <Button size="lg" variant="outline" className="text-lg px-8">
               Watch Demo

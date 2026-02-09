@@ -44,11 +44,11 @@ export default function OrganizationsPage() {
   };
 
   // Redirect to landing page if not authenticated
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/');
-    }
-  }, [isAuthenticated, isLoading, router]);
+  // useEffect(() => {
+  //   if (!isLoading && !isAuthenticated) {
+  //     router.push('/');
+  //   }
+  // }, [isAuthenticated, isLoading, router]);
 
   // Load user's organizations
   useEffect(() => {
